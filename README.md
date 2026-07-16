@@ -1,2 +1,2 @@
 # avito-ad-filter
-A vibecoded userscript that disables the display of purchased and viewed ads on the avito.ru website.
+Вайбкод-юзерскрипт, в котором всё написало AI, чем я и горжусь. Скрипт добавляет на сайте avito.ru меню, которое даёт возможность скрыть объявления, которые "забронированы" и которые "просмотрены". Работает через Tampermonkey.
