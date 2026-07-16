@@ -6,6 +6,8 @@
 // @match        https://www.avito.ru/*
 // @grant        none
 // @author       Black Ace
+// @updateURL    https://raw.githubusercontent.com/cjblackace/avito-ad-filter/refs/heads/main/avito-ad-filter.user.js
+// @downloadURL  https://raw.githubusercontent.com/cjblackace/avito-ad-filter/refs/heads/main/avito-ad-filter.user.js
 // @run-at       document-start
 // ==/UserScript==
 
