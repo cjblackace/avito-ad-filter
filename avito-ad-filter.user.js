@@ -14,6 +14,9 @@
 (function () {
     'use strict';
 
+    /*
+     * Селекторы карточек.
+     */
     const REGULAR_ITEM_SELECTOR =
         '[data-marker="item"]';
 
@@ -25,30 +28,54 @@
         RECOMMENDATION_ITEM_SELECTOR
     ].join(', ');
 
+    /*
+     * Иконка доставки внутри объявления.
+     */
+    const DELIVERY_ICON_SELECTOR =
+        '[data-icon-name="delivery"]';
+
+    /*
+     * Ключи localStorage.
+     */
     const STORAGE_HIDE_RESERVED =
         'avitoFilter_hideReserved';
 
     const STORAGE_HIDE_VIEWED =
         'avitoFilter_hideViewed';
 
+    const STORAGE_HIDE_NO_DELIVERY =
+        'avitoFilter_hideNoDelivery';
+
     const STORAGE_WIDGET_POSITION =
         'avitoFilter_widgetPosition';
 
+    /*
+     * CSS-классы, которыми скрываются карточки.
+     */
     const HIDDEN_RESERVED_CLASS =
         'avito-filter-hidden-reserved';
 
     const HIDDEN_VIEWED_CLASS =
         'avito-filter-hidden-viewed';
 
+    const HIDDEN_NO_DELIVERY_CLASS =
+        'avito-filter-hidden-no-delivery';
+
     /*
-     * Переключатель включён — объявления скрываются.
-     * По умолчанию оба фильтра включены.
+     * «Забронировано» и «Просмотрено»
+     * включены по умолчанию.
      */
     let hideReserved =
         localStorage.getItem(STORAGE_HIDE_RESERVED) !== 'false';
 
     let hideViewed =
         localStorage.getItem(STORAGE_HIDE_VIEWED) !== 'false';
+
+    /*
+     * «Без доставки» выключен по умолчанию.
+     */
+    let hideNoDelivery =
+        localStorage.getItem(STORAGE_HIDE_NO_DELIVERY) === 'true';
 
     let filterScheduled = false;
 
@@ -61,8 +88,8 @@
 
     function getRecommendationTarget(item) {
         /*
-         * Для рекомендованного товара скрываем элемент,
-         * расположенный на два уровня выше карточки.
+         * У рекомендованных товаров внешний контейнер
+         * расположен на два уровня выше самой карточки.
          */
         return (
             item.parentElement?.parentElement ||
@@ -81,9 +108,8 @@
 
     function clearFilterClasses(item) {
         /*
-         * Удаляем классы со всех возможных контейнеров.
-         * Это позволяет корректно возвращать объявления
-         * после отключения переключателя.
+         * Очищаем классы как с самой карточки,
+         * так и с возможных родительских контейнеров.
          */
         const elements = [
             item,
@@ -98,7 +124,8 @@
 
             element.classList.remove(
                 HIDDEN_RESERVED_CLASS,
-                HIDDEN_VIEWED_CLASS
+                HIDDEN_VIEWED_CLASS,
+                HIDDEN_NO_DELIVERY_CLASS
             );
         }
     }
@@ -118,6 +145,16 @@
         const isViewed =
             text.includes('просмотрено');
 
+        /*
+         * Доставка считается доступной, если внутри
+         * карточки существует иконка data-icon-name="delivery".
+         */
+        const hasDelivery =
+            item.querySelector(DELIVERY_ICON_SELECTOR) !== null;
+
+        const hasNoDelivery =
+            !hasDelivery;
+
         const target = getFilterTarget(item);
 
         clearFilterClasses(item);
@@ -130,6 +167,11 @@
         target.classList.toggle(
             HIDDEN_VIEWED_CLASS,
             hideViewed && isViewed
+        );
+
+        target.classList.toggle(
+            HIDDEN_NO_DELIVERY_CLASS,
+            hideNoDelivery && hasNoDelivery
         );
     }
 
@@ -162,7 +204,8 @@
 
         style.textContent = `
             .${HIDDEN_RESERVED_CLASS},
-            .${HIDDEN_VIEWED_CLASS} {
+            .${HIDDEN_VIEWED_CLASS},
+            .${HIDDEN_NO_DELIVERY_CLASS} {
                 display: none !important;
             }
 
@@ -249,8 +292,10 @@
 
             .avito-filter-switch input {
                 position: absolute;
+
                 width: 1px;
                 height: 1px;
+
                 opacity: 0;
                 pointer-events: none;
             }
@@ -270,6 +315,7 @@
 
             .avito-filter-slider::before {
                 content: "";
+
                 position: absolute;
                 left: 3px;
                 bottom: 3px;
@@ -287,6 +333,7 @@
             .avito-filter-switch input:checked
             + .avito-filter-slider {
                 background: #00aaff;
+
                 box-shadow:
                     0 0 0 1px rgba(0, 170, 255, 0.25);
             }
@@ -329,8 +376,15 @@
             filterAllItems();
         });
 
-        label.append(input, slider);
-        row.append(text, label);
+        label.append(
+            input,
+            slider
+        );
+
+        row.append(
+            text,
+            label
+        );
 
         return row;
     }
@@ -497,8 +551,15 @@
             saveWidgetPosition(widget);
         }
 
-        handle.addEventListener('pointerup', stopDragging);
-        handle.addEventListener('pointercancel', stopDragging);
+        handle.addEventListener(
+            'pointerup',
+            stopDragging
+        );
+
+        handle.addEventListener(
+            'pointercancel',
+            stopDragging
+        );
 
         window.addEventListener('resize', () => {
             if (
@@ -553,9 +614,23 @@
             }
         );
 
+        const noDeliverySwitch = createSwitch(
+            'Без доставки',
+            hideNoDelivery,
+            value => {
+                hideNoDelivery = value;
+
+                localStorage.setItem(
+                    STORAGE_HIDE_NO_DELIVERY,
+                    String(value)
+                );
+            }
+        );
+
         body.append(
             reservedSwitch,
-            viewedSwitch
+            viewedSwitch,
+            noDeliverySwitch
         );
 
         widget.append(
@@ -573,7 +648,8 @@
         const observer = new MutationObserver(mutations => {
             for (const mutation of mutations) {
                 /*
-                 * Изменения самого виджета можно игнорировать.
+                 * Изменения внутри собственного виджета
+                 * не требуют повторной фильтрации.
                  */
                 const targetElement =
                     mutation.target.nodeType === Node.TEXT_NODE
@@ -589,7 +665,8 @@
 
                 if (
                     mutation.type === 'childList' ||
-                    mutation.type === 'characterData'
+                    mutation.type === 'characterData' ||
+                    mutation.type === 'attributes'
                 ) {
                     scheduleFilter();
                     break;
@@ -600,7 +677,17 @@
         observer.observe(document.body, {
             childList: true,
             subtree: true,
-            characterData: true
+            characterData: true,
+
+            /*
+             * Иконка доставки может появиться через изменение
+             * атрибутов уже созданного SVG-элемента.
+             */
+            attributes: true,
+            attributeFilter: [
+                'data-icon-name',
+                'data-marker'
+            ]
         });
     }
 
