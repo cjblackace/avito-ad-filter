@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Avito — фильтр объявлений
 // @namespace    https://www.avito.ru/
-// @version      2.1
+// @version      0.1
 // @description  Скрывает забронированные и просмотренные объявления
 // @match        https://www.avito.ru/*
 // @grant        none
