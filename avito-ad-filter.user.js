@@ -14,16 +14,31 @@
 (function () {
     'use strict';
 
-    const ITEM_SELECTOR = //дата-маркеры для скрытия
-    '[data-marker="item"], ' +
-    '[data-marker="bx-recommendations-block-item"]';
+    const REGULAR_ITEM_SELECTOR =
+        '[data-marker="item"]';
 
-    const STORAGE_HIDE_RESERVED = 'avitoFilter_hideReserved';
-    const STORAGE_HIDE_VIEWED = 'avitoFilter_hideViewed';
-    const STORAGE_WIDGET_POSITION = 'avitoFilter_widgetPosition';
+    const RECOMMENDATION_ITEM_SELECTOR =
+        '[data-marker="bx-recommendations-block-item"]';
 
-    const HIDDEN_RESERVED_CLASS = 'avito-filter-hidden-reserved';
-    const HIDDEN_VIEWED_CLASS = 'avito-filter-hidden-viewed';
+    const ITEM_SELECTOR = [
+        REGULAR_ITEM_SELECTOR,
+        RECOMMENDATION_ITEM_SELECTOR
+    ].join(', ');
+
+    const STORAGE_HIDE_RESERVED =
+        'avitoFilter_hideReserved';
+
+    const STORAGE_HIDE_VIEWED =
+        'avitoFilter_hideViewed';
+
+    const STORAGE_WIDGET_POSITION =
+        'avitoFilter_widgetPosition';
+
+    const HIDDEN_RESERVED_CLASS =
+        'avito-filter-hidden-reserved';
+
+    const HIDDEN_VIEWED_CLASS =
+        'avito-filter-hidden-viewed';
 
     /*
      * Переключатель включён — объявления скрываются.
@@ -38,10 +53,54 @@
     let filterScheduled = false;
 
     function normalizeText(text) {
-        return text
+        return String(text || '')
             .replace(/\s+/g, ' ')
             .trim()
             .toLowerCase();
+    }
+
+    function getRecommendationTarget(item) {
+        /*
+         * Для рекомендованного товара скрываем элемент,
+         * расположенный на два уровня выше карточки.
+         */
+        return (
+            item.parentElement?.parentElement ||
+            item.parentElement ||
+            item
+        );
+    }
+
+    function getFilterTarget(item) {
+        if (item.matches(RECOMMENDATION_ITEM_SELECTOR)) {
+            return getRecommendationTarget(item);
+        }
+
+        return item;
+    }
+
+    function clearFilterClasses(item) {
+        /*
+         * Удаляем классы со всех возможных контейнеров.
+         * Это позволяет корректно возвращать объявления
+         * после отключения переключателя.
+         */
+        const elements = [
+            item,
+            item.parentElement,
+            item.parentElement?.parentElement
+        ];
+
+        for (const element of elements) {
+            if (!(element instanceof HTMLElement)) {
+                continue;
+            }
+
+            element.classList.remove(
+                HIDDEN_RESERVED_CLASS,
+                HIDDEN_VIEWED_CLASS
+            );
+        }
     }
 
     function filterItem(item) {
@@ -50,18 +109,25 @@
         }
 
         const text = normalizeText(
-            item.innerText || item.textContent || ''
+            item.innerText || item.textContent
         );
 
-        const isReserved = text.includes('забронировано');
-        const isViewed = text.includes('просмотрено');
+        const isReserved =
+            text.includes('забронировано');
 
-        item.classList.toggle(
+        const isViewed =
+            text.includes('просмотрено');
+
+        const target = getFilterTarget(item);
+
+        clearFilterClasses(item);
+
+        target.classList.toggle(
             HIDDEN_RESERVED_CLASS,
             hideReserved && isReserved
         );
 
-        item.classList.toggle(
+        target.classList.toggle(
             HIDDEN_VIEWED_CLASS,
             hideViewed && isViewed
         );
@@ -182,9 +248,11 @@
             }
 
             .avito-filter-switch input {
-                width: 0;
-                height: 0;
+                position: absolute;
+                width: 1px;
+                height: 1px;
                 opacity: 0;
+                pointer-events: none;
             }
 
             .avito-filter-slider {
@@ -269,14 +337,18 @@
 
     function restoreWidgetPosition(widget) {
         try {
-            const saved = JSON.parse(
-                localStorage.getItem(STORAGE_WIDGET_POSITION)
-            );
+            const rawValue =
+                localStorage.getItem(STORAGE_WIDGET_POSITION);
+
+            if (!rawValue) {
+                return;
+            }
+
+            const saved = JSON.parse(rawValue);
 
             if (
-                !saved ||
-                !Number.isFinite(saved.left) ||
-                !Number.isFinite(saved.top)
+                !Number.isFinite(saved?.left) ||
+                !Number.isFinite(saved?.top)
             ) {
                 return;
             }
@@ -291,17 +363,23 @@
                 window.innerHeight - widget.offsetHeight
             );
 
-            widget.style.left =
-                Math.min(Math.max(0, saved.left), maxLeft) + 'px';
+            const left = Math.min(
+                Math.max(0, saved.left),
+                maxLeft
+            );
 
-            widget.style.top =
-                Math.min(Math.max(0, saved.top), maxTop) + 'px';
+            const top = Math.min(
+                Math.max(0, saved.top),
+                maxTop
+            );
 
+            widget.style.left = left + 'px';
+            widget.style.top = top + 'px';
             widget.style.right = 'auto';
             widget.style.bottom = 'auto';
         } catch (error) {
             console.warn(
-                'Не удалось восстановить положение виджета:',
+                'Avito Filter: не удалось восстановить положение виджета.',
                 error
             );
         }
@@ -319,6 +397,37 @@
         );
     }
 
+    function keepWidgetInsideWindow(widget) {
+        const rect = widget.getBoundingClientRect();
+
+        const maxLeft = Math.max(
+            0,
+            window.innerWidth - widget.offsetWidth
+        );
+
+        const maxTop = Math.max(
+            0,
+            window.innerHeight - widget.offsetHeight
+        );
+
+        const left = Math.min(
+            Math.max(0, rect.left),
+            maxLeft
+        );
+
+        const top = Math.min(
+            Math.max(0, rect.top),
+            maxTop
+        );
+
+        widget.style.left = left + 'px';
+        widget.style.top = top + 'px';
+        widget.style.right = 'auto';
+        widget.style.bottom = 'auto';
+
+        saveWidgetPosition(widget);
+    }
+
     function makeWidgetDraggable(widget, handle) {
         let dragging = false;
         let offsetX = 0;
@@ -332,12 +441,10 @@
             const rect = widget.getBoundingClientRect();
 
             dragging = true;
+
             offsetX = event.clientX - rect.left;
             offsetY = event.clientY - rect.top;
 
-            /*
-             * Переводим положение из right/bottom в left/top.
-             */
             widget.style.left = rect.left + 'px';
             widget.style.top = rect.top + 'px';
             widget.style.right = 'auto';
@@ -393,13 +500,7 @@
         handle.addEventListener('pointerup', stopDragging);
         handle.addEventListener('pointercancel', stopDragging);
 
-        /*
-         * После изменения размера окна удерживаем виджет
-         * в пределах видимой части страницы.
-         */
         window.addEventListener('resize', () => {
-            const rect = widget.getBoundingClientRect();
-
             if (
                 widget.style.left === '' ||
                 widget.style.top === ''
@@ -407,23 +508,7 @@
                 return;
             }
 
-            const maxLeft = Math.max(
-                0,
-                window.innerWidth - widget.offsetWidth
-            );
-
-            const maxTop = Math.max(
-                0,
-                window.innerHeight - widget.offsetHeight
-            );
-
-            widget.style.left =
-                Math.min(Math.max(0, rect.left), maxLeft) + 'px';
-
-            widget.style.top =
-                Math.min(Math.max(0, rect.top), maxTop) + 'px';
-
-            saveWidgetPosition(widget);
+            keepWidgetInsideWindow(widget);
         });
     }
 
@@ -468,8 +553,15 @@
             }
         );
 
-        body.append(reservedSwitch, viewedSwitch);
-        widget.append(header, body);
+        body.append(
+            reservedSwitch,
+            viewedSwitch
+        );
+
+        widget.append(
+            header,
+            body
+        );
 
         document.body.appendChild(widget);
 
@@ -477,18 +569,24 @@
         makeWidgetDraggable(widget, header);
     }
 
-    function start() {
-        if (!document.body || !document.head) {
-            requestAnimationFrame(start);
-            return;
-        }
-
-        addStyles();
-        createWidget();
-        filterAllItems();
-
+    function startObserver() {
         const observer = new MutationObserver(mutations => {
             for (const mutation of mutations) {
+                /*
+                 * Изменения самого виджета можно игнорировать.
+                 */
+                const targetElement =
+                    mutation.target.nodeType === Node.TEXT_NODE
+                        ? mutation.target.parentElement
+                        : mutation.target;
+
+                if (
+                    targetElement instanceof Element &&
+                    targetElement.closest('#avito-filter-widget')
+                ) {
+                    continue;
+                }
+
                 if (
                     mutation.type === 'childList' ||
                     mutation.type === 'characterData'
@@ -504,6 +602,18 @@
             subtree: true,
             characterData: true
         });
+    }
+
+    function start() {
+        if (!document.body || !document.head) {
+            requestAnimationFrame(start);
+            return;
+        }
+
+        addStyles();
+        createWidget();
+        filterAllItems();
+        startObserver();
     }
 
     start();
