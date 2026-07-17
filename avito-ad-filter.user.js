@@ -14,7 +14,9 @@
 (function () {
     'use strict';
 
-    const ITEM_SELECTOR = '[data-marker="item"]';
+    const ITEM_SELECTOR = //дата-маркеры для скрытия
+    '[data-marker="item"], ' +
+    '[data-marker="bx-recommendations-block-item"]';
 
     const STORAGE_HIDE_RESERVED = 'avitoFilter_hideReserved';
     const STORAGE_HIDE_VIEWED = 'avitoFilter_hideViewed';
