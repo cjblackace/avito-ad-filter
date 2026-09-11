@@ -8,4 +8,4 @@
 # Установка
 Установите расширение [TAMPERMONKEY](https://www.tampermonkey.net/) на Ваш браузер, после чего [УСТАНОВИТЕ](https://raw.githubusercontent.com/cjblackace/avito-ad-filter/refs/heads/main/avito-ad-filter.user.js) скрипт. Всем удачных покупок!
 
-![Avito](https://raw.githubusercontent.com/cjblackace/avito-ad-filter/refs/heads/main/avito03.JPG)
+![Avito](https://raw.githubusercontent.com/cjblackace/avito-ad-filter/refs/heads/main/avito04.jpg)
