@@ -14,11 +14,9 @@
 (function () {
     'use strict';
 
-    /*
-     * ============================================================
-     * СЕЛЕКТОРЫ КАРТОЧЕК
-     * ============================================================
-     */
+    /* =========================================================
+       СЕЛЕКТОРЫ
+       ========================================================= */
 
     const REGULAR_ITEM_SELECTOR =
         '[data-marker="item"]';
@@ -34,12 +32,6 @@
     const DELIVERY_ICON_SELECTOR =
         '[data-icon-name="delivery"]';
 
-    /*
-     * Ссылки продавцов:
-     *
-     * /brands/<ID>
-     * /user/<ID>/profile
-     */
     const SELLER_LINK_SELECTOR = [
         'a[href^="/brands/"]',
         'a[href^="/user/"]',
@@ -48,73 +40,66 @@
     ].join(', ');
 
 
-    /*
-     * ============================================================
-     * КЛЮЧИ ХРАНИЛИЩА TAMPERMONKEY
-     * ============================================================
-     */
+    /* =========================================================
+       КЛЮЧИ TAMPERMONKEY STORAGE
+       ========================================================= */
 
-    const GM_HIDE_RESERVED =
+    const KEY_HIDE_RESERVED =
         'hideReserved';
 
-    const GM_HIDE_VIEWED =
+    const KEY_HIDE_VIEWED =
         'hideViewed';
 
-    const GM_HIDE_NO_DELIVERY =
+    const KEY_HIDE_NO_DELIVERY =
         'hideNoDelivery';
 
-    const GM_HIDE_BLACKLIST =
+    const KEY_HIDE_BLACKLIST =
         'hideBlacklist';
 
-    const GM_BLACKLIST =
+    const KEY_BLACKLIST =
         'blacklist';
 
-    const GM_WIDGET_POSITION =
+    const KEY_WIDGET_POSITION =
         'widgetPosition';
 
-    const GM_WIDGET_COLLAPSED =
+    const KEY_WIDGET_COLLAPSED =
         'widgetCollapsed';
 
-    const GM_MIGRATION_DONE =
-        'migrationFromLocalStorageDone';
+    const KEY_MIGRATED =
+        'migrationV42Done';
 
 
-    /*
-     * ============================================================
-     * СТАРЫЕ КЛЮЧИ LOCALSTORAGE
-     *
-     * Нужны только для автоматического переноса данных
-     * из предыдущей версии.
-     * ============================================================
-     */
+    /* =========================================================
+       СТАРЫЕ КЛЮЧИ LOCALSTORAGE
+       ========================================================= */
 
-    const OLD_STORAGE_HIDE_RESERVED =
-        'avitoTweaks_hideReserved';
+    const OLD_KEYS = {
+        hideReserved:
+            'avitoTweaks_hideReserved',
 
-    const OLD_STORAGE_HIDE_VIEWED =
-        'avitoTweaks_hideViewed';
+        hideViewed:
+            'avitoTweaks_hideViewed',
 
-    const OLD_STORAGE_HIDE_NO_DELIVERY =
-        'avitoTweaks_hideNoDelivery';
+        hideNoDelivery:
+            'avitoTweaks_hideNoDelivery',
 
-    const OLD_STORAGE_HIDE_BLACKLIST =
-        'avitoTweaks_hideBlacklist';
+        hideBlacklist:
+            'avitoTweaks_hideBlacklist',
 
-    const OLD_STORAGE_BLACKLIST =
-        'avitoTweaks_blacklistV2';
+        blacklist:
+            'avitoTweaks_blacklistV2',
 
-    const OLD_STORAGE_WIDGET_POSITION =
-        'avitoTweaks_widgetPosition';
+        widgetPosition:
+            'avitoTweaks_widgetPosition',
 
-    const OLD_STORAGE_WIDGET_COLLAPSED =
-        'avitoTweaks_widgetCollapsed';
+        widgetCollapsed:
+            'avitoTweaks_widgetCollapsed'
+    };
 
 
-    /*
-     * ============================================================
-     * CSS-КЛАССЫ СКРЫТИЯ
-     * ============================================================
-     */
+    /* =========================================================
+       CSS-КЛАССЫ
+       ========================================================= */
 
     const HIDDEN_RESERVED_CLASS =
         'avito-tweaks-hidden-reserved';
@@ -129,260 +114,87 @@
         'avito-tweaks-hidden-blacklist';
 
 
-    /*
-     * ============================================================
-     * МИГРАЦИЯ ИЗ LOCALSTORAGE В TAMPERMONKEY
-     * ============================================================
-     */
+    /* =========================================================
+       БЕЗОПАСНЫЕ ОБЁРТКИ GM
+       ========================================================= */
 
-    function migrateFromLocalStorage() {
-
-        /*
-         * Миграция выполняется только один раз.
-         */
-        if (GM_getValue(GM_MIGRATION_DONE, false)) {
-            return;
-        }
-
+    function storageGet(key, defaultValue) {
         try {
+            const value =
+                GM_getValue(key, defaultValue);
 
-            /*
-             * Забронировано
-             */
-            const oldReserved =
-                localStorage.getItem(
-                    OLD_STORAGE_HIDE_RESERVED
-                );
-
-            if (
-                GM_getValue(GM_HIDE_RESERVED, undefined) === undefined &&
-                oldReserved !== null
-            ) {
-                GM_setValue(
-                    GM_HIDE_RESERVED,
-                    oldReserved !== 'false'
-                );
-            }
-
-
-            /*
-             * Просмотрено
-             */
-            const oldViewed =
-                localStorage.getItem(
-                    OLD_STORAGE_HIDE_VIEWED
-                );
-
-            if (
-                GM_getValue(GM_HIDE_VIEWED, undefined) === undefined &&
-                oldViewed !== null
-            ) {
-                GM_setValue(
-                    GM_HIDE_VIEWED,
-                    oldViewed !== 'false'
-                );
-            }
-
-
-            /*
-             * Без доставки
-             */
-            const oldNoDelivery =
-                localStorage.getItem(
-                    OLD_STORAGE_HIDE_NO_DELIVERY
-                );
-
-            if (
-                GM_getValue(GM_HIDE_NO_DELIVERY, undefined) === undefined &&
-                oldNoDelivery !== null
-            ) {
-                GM_setValue(
-                    GM_HIDE_NO_DELIVERY,
-                    oldNoDelivery === 'true'
-                );
-            }
-
-
-            /*
-             * Чёрный список включён / выключен
-             */
-            const oldBlacklistEnabled =
-                localStorage.getItem(
-                    OLD_STORAGE_HIDE_BLACKLIST
-                );
-
-            if (
-                GM_getValue(GM_HIDE_BLACKLIST, undefined) === undefined &&
-                oldBlacklistEnabled !== null
-            ) {
-                GM_setValue(
-                    GM_HIDE_BLACKLIST,
-                    oldBlacklistEnabled === 'true'
-                );
-            }
-
-
-            /*
-             * Сам чёрный список
-             */
-            const oldBlacklist =
-                localStorage.getItem(
-                    OLD_STORAGE_BLACKLIST
-                );
-
-            if (
-                GM_getValue(GM_BLACKLIST, undefined) === undefined &&
-                oldBlacklist
-            ) {
-                try {
-                    const parsed =
-                        JSON.parse(oldBlacklist);
-
-                    if (Array.isArray(parsed)) {
-                        GM_setValue(
-                            GM_BLACKLIST,
-                            parsed
-                        );
-                    }
-
-                } catch (error) {
-                    console.warn(
-                        'Avito Tweaks: не удалось перенести старый ЧС.',
-                        error
-                    );
-                }
-            }
-
-
-            /*
-             * Положение виджета
-             */
-            const oldPosition =
-                localStorage.getItem(
-                    OLD_STORAGE_WIDGET_POSITION
-                );
-
-            if (
-                GM_getValue(GM_WIDGET_POSITION, undefined) === undefined &&
-                oldPosition
-            ) {
-                try {
-                    const parsed =
-                        JSON.parse(oldPosition);
-
-                    GM_setValue(
-                        GM_WIDGET_POSITION,
-                        parsed
-                    );
-
-                } catch (error) {
-                    console.warn(
-                        'Avito Tweaks: не удалось перенести позицию окна.',
-                        error
-                    );
-                }
-            }
-
-
-            /*
-             * Свернуто / развернуто
-             */
-            const oldCollapsed =
-                localStorage.getItem(
-                    OLD_STORAGE_WIDGET_COLLAPSED
-                );
-
-            if (
-                GM_getValue(GM_WIDGET_COLLAPSED, undefined) === undefined &&
-                oldCollapsed !== null
-            ) {
-                GM_setValue(
-                    GM_WIDGET_COLLAPSED,
-                    oldCollapsed === 'true'
-                );
-            }
-
+            return value;
         } catch (error) {
-            console.warn(
-                'Avito Tweaks: ошибка миграции.',
+            console.error(
+                'Avito Tweaks: GM_getValue error:',
+                key,
                 error
             );
-        }
 
-        /*
-         * Старые данные специально НЕ удаляем.
-         * Пусть остаются как страховочная копия.
-         */
-        GM_setValue(
-            GM_MIGRATION_DONE,
-            true
-        );
+            return defaultValue;
+        }
+    }
+
+    function storageSet(key, value) {
+        try {
+            GM_setValue(key, value);
+            return true;
+        } catch (error) {
+            console.error(
+                'Avito Tweaks: GM_setValue error:',
+                key,
+                error
+            );
+
+            return false;
+        }
     }
 
 
-    /*
-     * Выполняем миграцию до чтения настроек.
-     */
-    migrateFromLocalStorage();
-
-
-    /*
-     * ============================================================
-     * СОСТОЯНИЕ
-     * ============================================================
-     */
-
-    /*
-     * По умолчанию:
-     *
-     * Забронировано  = скрывать
-     * Просмотрено    = скрывать
-     * Без доставки   = показывать
-     * Чёрный список  = выключен
-     */
+    /* =========================================================
+       СОСТОЯНИЕ
+       ========================================================= */
 
     let hideReserved =
-        GM_getValue(
-            GM_HIDE_RESERVED,
+        storageGet(
+            KEY_HIDE_RESERVED,
             true
         );
 
     let hideViewed =
-        GM_getValue(
-            GM_HIDE_VIEWED,
+        storageGet(
+            KEY_HIDE_VIEWED,
             true
         );
 
     let hideNoDelivery =
-        GM_getValue(
-            GM_HIDE_NO_DELIVERY,
+        storageGet(
+            KEY_HIDE_NO_DELIVERY,
             false
         );
 
     let hideBlacklist =
-        GM_getValue(
-            GM_HIDE_BLACKLIST,
+        storageGet(
+            KEY_HIDE_BLACKLIST,
             false
         );
 
     let widgetCollapsed =
-        GM_getValue(
-            GM_WIDGET_COLLAPSED,
+        storageGet(
+            KEY_WIDGET_COLLAPSED,
             false
         );
 
     let blacklist =
         loadBlacklist();
 
-    let filterScheduled =
+    let refreshScheduled =
         false;
 
 
-    /*
-     * ============================================================
-     * ОБЩИЕ ФУНКЦИИ
-     * ============================================================
-     */
+    /* =========================================================
+       ОБЩИЕ ФУНКЦИИ
+       ========================================================= */
 
     function normalizeText(text) {
         return String(text || '')
@@ -391,17 +203,14 @@
     }
 
 
-    /*
-     * ============================================================
-     * ЧЁРНЫЙ СПИСОК
-     * ============================================================
-     */
+    /* =========================================================
+       ЧЁРНЫЙ СПИСОК
+       ========================================================= */
 
     function loadBlacklist() {
-
         const value =
-            GM_getValue(
-                GM_BLACKLIST,
+            storageGet(
+                KEY_BLACKLIST,
                 []
             );
 
@@ -417,8 +226,8 @@
     }
 
     function saveBlacklist() {
-        GM_setValue(
-            GM_BLACKLIST,
+        storageSet(
+            KEY_BLACKLIST,
             blacklist
         );
     }
@@ -438,15 +247,12 @@
             return;
         }
 
-        if (
-            isSellerBlacklisted(id)
-        ) {
+        if (isSellerBlacklisted(id)) {
             return;
         }
 
         blacklist.push({
             id: id,
-
             name:
                 normalizeText(name) ||
                 id
@@ -455,14 +261,11 @@
         saveBlacklist();
 
         renderBlacklist();
-
         updateSellerButtons();
-
         filterAllItems();
     }
 
     function removeSellerFromBlacklist(id) {
-
         blacklist =
             blacklist.filter(
                 entry =>
@@ -472,34 +275,35 @@
         saveBlacklist();
 
         renderBlacklist();
-
         updateSellerButtons();
-
         filterAllItems();
     }
 
 
-    /*
-     * ============================================================
-     * ПОЛУЧЕНИЕ ID ПРОДАВЦА
-     * ============================================================
-     */
+    /* =========================================================
+       ID ПРОДАВЦА ИЗ ССЫЛКИ
+       ========================================================= */
 
     function getSellerIdFromLink(link) {
+        if (!link) {
+            return null;
+        }
 
-        if (
-            !(link instanceof HTMLAnchorElement)
-        ) {
+        const href =
+            link.getAttribute('href');
+
+        if (!href) {
             return null;
         }
 
         let url;
 
         try {
-            url = new URL(
-                link.getAttribute('href'),
-                location.origin
-            );
+            url =
+                new URL(
+                    href,
+                    location.origin
+                );
         } catch {
             return null;
         }
@@ -507,26 +311,20 @@
         const path =
             url.pathname;
 
-
         /*
-         * Компания / бренд
-         *
-         * /brands/9f02d3011e749e044cf4e382b49e20ae
+         * /brands/9f02...
          */
         let match =
             path.match(
-                /^\/brands\/([a-zA-Z0-9]+)/
+                /^\/brands\/([a-zA-Z0-9]+)(?:\/|$)/
             );
 
         if (match) {
             return match[1];
         }
 
-
         /*
-         * Обычный пользователь
-         *
-         * /user/d3b0b6466577ad9ba894a979173c8765/profile
+         * /user/d3b0.../profile
          */
         match =
             path.match(
@@ -541,17 +339,12 @@
     }
 
 
-    /*
-     * ============================================================
-     * ИНФОРМАЦИЯ О ПРОДАВЦЕ
-     * ============================================================
-     */
+    /* =========================================================
+       ПОИСК ПРОДАВЦА В КАРТОЧКЕ
+       ========================================================= */
 
     function findSellerInfo(item) {
-
-        if (
-            !(item instanceof HTMLElement)
-        ) {
+        if (!item) {
             return null;
         }
 
@@ -561,7 +354,6 @@
             );
 
         for (const link of links) {
-
             const id =
                 getSellerIdFromLink(link);
 
@@ -569,32 +361,19 @@
                 continue;
             }
 
-            /*
-             * Ник продавца обычно находится
-             * внутри <p>.
-             */
             let nameElement =
                 link.querySelector('p');
 
-
-            /*
-             * Запасной вариант:
-             * <p> расположен рядом с самой ссылкой.
-             */
             if (!nameElement) {
-
-                const parent =
-                    link.parentElement;
-
                 nameElement =
-                    parent?.querySelector('p') ||
+                    link.parentElement
+                        ?.querySelector('p') ||
                     null;
             }
 
             let name = '';
 
             if (nameElement) {
-
                 name =
                     normalizeText(
                         nameElement.innerText ||
@@ -602,12 +381,7 @@
                     );
             }
 
-
-            /*
-             * Ещё один fallback.
-             */
             if (!name) {
-
                 name =
                     normalizeText(
                         link.innerText ||
@@ -615,13 +389,7 @@
                     );
             }
 
-
-            /*
-             * Если Avito совсем поменял разметку,
-             * хотя бы сохраним ID.
-             */
             if (!name) {
-
                 name =
                     'Продавец ' +
                     id.slice(0, 8);
@@ -639,24 +407,15 @@
     }
 
 
-    /*
-     * ============================================================
-     * КНОПКА "В ЧС"
-     * ============================================================
-     */
+    /* =========================================================
+       КНОПКИ "В ЧС"
+       ========================================================= */
 
     function addBlacklistButton(item) {
-
-        if (
-            !(item instanceof HTMLElement)
-        ) {
+        if (!item) {
             return;
         }
 
-        /*
-         * Если кнопку в этой карточке
-         * уже создавали — ничего не делаем.
-         */
         if (
             item.querySelector(
                 '.avito-tweaks-add-blacklist'
@@ -672,11 +431,6 @@
             return;
         }
 
-        /*
-         * Используем span, а не button,
-         * поскольку блок продавца часто находится
-         * внутри ссылки <a>.
-         */
         const button =
             document.createElement('span');
 
@@ -699,28 +453,19 @@
             '0'
         );
 
-
-        /*
-         * Ставим кнопку рядом с ником.
-         */
         if (seller.nameElement) {
-
             seller.nameElement
                 .insertAdjacentElement(
                     'afterend',
                     button
                 );
-
         } else {
-
             seller.link.appendChild(
                 button
             );
         }
 
-
         function activate(event) {
-
             event.preventDefault();
             event.stopPropagation();
 
@@ -747,7 +492,6 @@
             );
         }
 
-
         button.addEventListener(
             'click',
             activate,
@@ -756,18 +500,14 @@
 
         button.addEventListener(
             'pointerdown',
-            event => {
-
-                event.stopPropagation();
-
-            },
+            event =>
+                event.stopPropagation(),
             true
         );
 
         button.addEventListener(
             'keydown',
             event => {
-
                 if (
                     event.key === 'Enter' ||
                     event.key === ' '
@@ -782,34 +522,30 @@
         );
     }
 
-
     function updateSellerButton(button) {
-
         const id =
             button.dataset.sellerId;
 
-        const blacklisted =
+        const blocked =
             isSellerBlacklisted(id);
 
         button.classList.toggle(
             'avito-tweaks-add-blacklist-active',
-            blacklisted
+            blocked
         );
 
         button.textContent =
-            blacklisted
+            blocked
                 ? 'В ЧС ✓'
                 : 'В ЧС';
 
         button.title =
-            blacklisted
+            blocked
                 ? 'Продавец уже в чёрном списке'
                 : 'Добавить продавца в чёрный список';
     }
 
-
     function updateSellerButtons() {
-
         document
             .querySelectorAll(
                 '.avito-tweaks-add-blacklist'
@@ -819,9 +555,7 @@
             );
     }
 
-
     function addBlacklistButtonsToAllItems() {
-
         document
             .querySelectorAll(
                 ITEM_SELECTOR
@@ -832,37 +566,20 @@
     }
 
 
-    /*
-     * ============================================================
-     * КОНТЕЙНЕРЫ КАРТОЧЕК
-     * ============================================================
-     */
-
-    function getRecommendationTarget(item) {
-
-        /*
-         * У рекомендованных товаров
-         * скрываем контейнер на два уровня выше.
-         */
-        return (
-            item.parentElement
-                ?.parentElement ||
-
-            item.parentElement ||
-
-            item
-        );
-    }
-
+    /* =========================================================
+       ЦЕЛЕВОЙ КОНТЕЙНЕР
+       ========================================================= */
 
     function getFilterTarget(item) {
-
         if (
             item.matches(
                 RECOMMENDATION_ITEM_SELECTOR
             )
         ) {
-            return getRecommendationTarget(
+            return (
+                item.parentElement
+                    ?.parentElement ||
+                item.parentElement ||
                 item
             );
         }
@@ -870,20 +587,16 @@
         return item;
     }
 
-
     function clearFilterClasses(item) {
-
         const elements = [
             item,
             item.parentElement,
-            item.parentElement?.parentElement
+            item.parentElement
+                ?.parentElement
         ];
 
         for (const element of elements) {
-
-            if (
-                !(element instanceof HTMLElement)
-            ) {
+            if (!element) {
                 continue;
             }
 
@@ -897,17 +610,12 @@
     }
 
 
-    /*
-     * ============================================================
-     * ФИЛЬТРАЦИЯ
-     * ============================================================
-     */
+    /* =========================================================
+       ФИЛЬТРАЦИЯ
+       ========================================================= */
 
     function filterItem(item) {
-
-        if (
-            !(item instanceof HTMLElement)
-        ) {
+        if (!item) {
             return;
         }
 
@@ -917,81 +625,64 @@
                 item.textContent
             ).toLowerCase();
 
-
         const isReserved =
             text.includes(
                 'забронировано'
             );
-
 
         const isViewed =
             text.includes(
                 'просмотрено'
             );
 
-
         const hasDelivery =
             item.querySelector(
                 DELIVERY_ICON_SELECTOR
             ) !== null;
 
-
         const seller =
             findSellerInfo(item);
 
-
-        const sellerInBlacklist =
+        const sellerBlocked =
             seller
                 ? isSellerBlacklisted(
                     seller.id
                 )
                 : false;
 
-
         const target =
             getFilterTarget(item);
-
 
         clearFilterClasses(
             item
         );
 
-
         target.classList.toggle(
             HIDDEN_RESERVED_CLASS,
-
             hideReserved &&
             isReserved
         );
 
-
         target.classList.toggle(
             HIDDEN_VIEWED_CLASS,
-
             hideViewed &&
             isViewed
         );
 
-
         target.classList.toggle(
             HIDDEN_NO_DELIVERY_CLASS,
-
             hideNoDelivery &&
             !hasDelivery
         );
 
-
         target.classList.toggle(
             HIDDEN_BLACKLIST_CLASS,
-
             hideBlacklist &&
-            sellerInBlacklist
+            sellerBlocked
         );
     }
 
-
     function filterAllItems() {
-
         document
             .querySelectorAll(
                 ITEM_SELECTOR
@@ -1001,44 +692,210 @@
             );
     }
 
-
     function refreshAll() {
-
         addBlacklistButtonsToAllItems();
-
         filterAllItems();
     }
 
-
     function scheduleRefresh() {
-
-        if (filterScheduled) {
+        if (refreshScheduled) {
             return;
         }
 
-        filterScheduled =
+        refreshScheduled =
             true;
 
-        requestAnimationFrame(
-            () => {
+        requestAnimationFrame(() => {
+            refreshScheduled =
+                false;
 
-                filterScheduled =
-                    false;
-
-                refreshAll();
-            }
-        );
+            refreshAll();
+        });
     }
 
 
-    /*
-     * ============================================================
-     * CSS
-     * ============================================================
-     */
+    /* =========================================================
+       МИГРАЦИЯ ИЗ LOCALSTORAGE
+       ========================================================= */
+
+    function migrateOldSettings() {
+        if (
+            storageGet(
+                KEY_MIGRATED,
+                false
+            )
+        ) {
+            return;
+        }
+
+        try {
+            /*
+             * Boolean helper.
+             */
+            function migrateBoolean(
+                oldKey,
+                newKey
+            ) {
+                const oldValue =
+                    localStorage.getItem(
+                        oldKey
+                    );
+
+                if (oldValue === null) {
+                    return;
+                }
+
+                storageSet(
+                    newKey,
+                    oldValue === 'true'
+                );
+            }
+
+            migrateBoolean(
+                OLD_KEYS.hideReserved,
+                KEY_HIDE_RESERVED
+            );
+
+            migrateBoolean(
+                OLD_KEYS.hideViewed,
+                KEY_HIDE_VIEWED
+            );
+
+            migrateBoolean(
+                OLD_KEYS.hideNoDelivery,
+                KEY_HIDE_NO_DELIVERY
+            );
+
+            migrateBoolean(
+                OLD_KEYS.hideBlacklist,
+                KEY_HIDE_BLACKLIST
+            );
+
+            migrateBoolean(
+                OLD_KEYS.widgetCollapsed,
+                KEY_WIDGET_COLLAPSED
+            );
+
+
+            /*
+             * Старый ЧС.
+             */
+            const oldBlacklist =
+                localStorage.getItem(
+                    OLD_KEYS.blacklist
+                );
+
+            if (oldBlacklist) {
+                try {
+                    const parsed =
+                        JSON.parse(
+                            oldBlacklist
+                        );
+
+                    if (
+                        Array.isArray(parsed) &&
+                        blacklist.length === 0
+                    ) {
+                        blacklist =
+                            parsed;
+
+                        saveBlacklist();
+                    }
+                } catch (error) {
+                    console.warn(
+                        'Avito Tweaks: ошибка миграции ЧС.',
+                        error
+                    );
+                }
+            }
+
+
+            /*
+             * Позиция окна.
+             */
+            const oldPosition =
+                localStorage.getItem(
+                    OLD_KEYS.widgetPosition
+                );
+
+            if (oldPosition) {
+                try {
+                    const parsed =
+                        JSON.parse(
+                            oldPosition
+                        );
+
+                    if (
+                        storageGet(
+                            KEY_WIDGET_POSITION,
+                            null
+                        ) === null
+                    ) {
+                        storageSet(
+                            KEY_WIDGET_POSITION,
+                            parsed
+                        );
+                    }
+                } catch {
+                    // ничего
+                }
+            }
+
+        } catch (error) {
+            console.warn(
+                'Avito Tweaks: миграция localStorage не удалась.',
+                error
+            );
+        }
+
+        storageSet(
+            KEY_MIGRATED,
+            true
+        );
+
+        /*
+         * После миграции перечитываем значения.
+         */
+        hideReserved =
+            storageGet(
+                KEY_HIDE_RESERVED,
+                hideReserved
+            );
+
+        hideViewed =
+            storageGet(
+                KEY_HIDE_VIEWED,
+                hideViewed
+            );
+
+        hideNoDelivery =
+            storageGet(
+                KEY_HIDE_NO_DELIVERY,
+                hideNoDelivery
+            );
+
+        hideBlacklist =
+            storageGet(
+                KEY_HIDE_BLACKLIST,
+                hideBlacklist
+            );
+
+        widgetCollapsed =
+            storageGet(
+                KEY_WIDGET_COLLAPSED,
+                widgetCollapsed
+            );
+
+        blacklist =
+            loadBlacklist();
+    }
+
+
+    /* =========================================================
+       CSS
+       ========================================================= */
 
     function addStyles() {
-
         if (
             document.getElementById(
                 'avito-tweaks-styles'
@@ -1056,22 +913,12 @@
             'avito-tweaks-styles';
 
         style.textContent = `
-
-            /*
-             * СКРЫТИЕ КАРТОЧЕК
-             */
-
             .${HIDDEN_RESERVED_CLASS},
             .${HIDDEN_VIEWED_CLASS},
             .${HIDDEN_NO_DELIVERY_CLASS},
             .${HIDDEN_BLACKLIST_CLASS} {
                 display: none !important;
             }
-
-
-            /*
-             * КНОПКА "В ЧС"
-             */
 
             .avito-tweaks-add-blacklist {
                 display: inline-flex;
@@ -1087,54 +934,40 @@
                 color: #666;
 
                 background:
-                    rgba(0, 0, 0, 0.05);
+                    rgba(0,0,0,.05);
 
                 border:
                     1px solid
-                    rgba(0, 0, 0, 0.10);
+                    rgba(0,0,0,.10);
 
                 border-radius: 5px;
 
                 font-family:
-                    Arial,
-                    Helvetica,
-                    sans-serif;
+                    Arial, sans-serif;
 
                 font-size: 10px;
-                font-weight: 500;
-
                 line-height: 15px;
 
                 cursor: pointer;
                 user-select: none;
-
-                transition:
-                    color 0.12s ease,
-                    background 0.12s ease,
-                    border-color 0.12s ease;
             }
 
             .avito-tweaks-add-blacklist:hover {
                 color: #111;
 
                 background:
-                    rgba(0, 0, 0, 0.10);
+                    rgba(0,0,0,.10);
             }
 
             .avito-tweaks-add-blacklist-active {
                 color: #9b2525;
 
                 background:
-                    rgba(180, 40, 40, 0.08);
+                    rgba(180,40,40,.08);
 
                 border-color:
-                    rgba(180, 40, 40, 0.18);
+                    rgba(180,40,40,.18);
             }
-
-
-            /*
-             * ОСНОВНОЙ ВИДЖЕТ
-             */
 
             #avito-tweaks-widget {
                 position: fixed;
@@ -1148,20 +981,20 @@
 
                 overflow: hidden;
 
-                color: #ffffff;
+                color: #fff;
 
                 background:
-                    rgba(25, 25, 28, 0.82);
+                    rgba(25,25,28,.82);
 
                 border:
                     1px solid
-                    rgba(255, 255, 255, 0.18);
+                    rgba(255,255,255,.18);
 
                 border-radius: 14px;
 
                 box-shadow:
                     0 8px 30px
-                    rgba(0, 0, 0, 0.30);
+                    rgba(0,0,0,.30);
 
                 backdrop-filter:
                     blur(10px);
@@ -1176,19 +1009,12 @@
 
                 font-size: 14px;
 
-                line-height: 1.3;
-
                 user-select: none;
             }
 
             #avito-tweaks-widget * {
                 box-sizing: border-box;
             }
-
-
-            /*
-             * HEADER
-             */
 
             #avito-tweaks-header {
                 display: flex;
@@ -1199,14 +1025,13 @@
                     11px 11px 11px 15px;
 
                 background:
-                    rgba(255, 255, 255, 0.08);
+                    rgba(255,255,255,.08);
 
                 border-bottom:
                     1px solid
-                    rgba(255, 255, 255, 0.12);
+                    rgba(255,255,255,.12);
 
                 cursor: move;
-
                 touch-action: none;
             }
 
@@ -1221,23 +1046,15 @@
                 margin-left: 8px;
 
                 color:
-                    rgba(255, 255, 255, 0.38);
+                    rgba(255,255,255,.38);
 
                 font-size: 17px;
             }
 
             #avito-tweaks-title {
                 font-size: 16px;
-
                 font-weight: 700;
-
-                letter-spacing: 0.2px;
             }
-
-
-            /*
-             * СВЕРНУТЬ
-             */
 
             #avito-tweaks-collapse {
                 display: flex;
@@ -1252,30 +1069,22 @@
                 padding: 0;
 
                 border: 0;
-
                 border-radius: 6px;
 
                 color: #fff;
 
                 background:
-                    rgba(255,255,255,0.08);
+                    rgba(255,255,255,.08);
 
                 font-size: 18px;
-
-                font-weight: 700;
 
                 cursor: pointer;
             }
 
             #avito-tweaks-collapse:hover {
                 background:
-                    rgba(255,255,255,0.17);
+                    rgba(255,255,255,.17);
             }
-
-
-            /*
-             * BODY
-             */
 
             #avito-tweaks-body {
                 padding:
@@ -1286,42 +1095,27 @@
                 opacity: 1;
 
                 transition:
-                    max-height 0.20s ease,
-                    opacity 0.15s ease,
-                    padding 0.20s ease;
+                    max-height .2s ease,
+                    opacity .15s ease,
+                    padding .2s ease;
             }
 
             #avito-tweaks-widget.avito-tweaks-collapsed
             #avito-tweaks-body {
-
                 max-height: 0;
-
                 opacity: 0;
 
                 padding-top: 0;
-
                 padding-bottom: 0;
 
                 pointer-events: none;
             }
 
-            #avito-tweaks-widget.avito-tweaks-collapsed
-            #avito-tweaks-header {
-
-                border-bottom-color:
-                    transparent;
-            }
-
-
-            /*
-             * ПОДЗАГОЛОВОК
-             */
-
             #avito-tweaks-subtitle {
                 margin-bottom: 8px;
 
                 color:
-                    rgba(255,255,255,0.60);
+                    rgba(255,255,255,.60);
 
                 font-size: 12px;
 
@@ -1331,49 +1125,30 @@
                     uppercase;
 
                 letter-spacing:
-                    0.7px;
+                    .7px;
             }
-
-
-            /*
-             * СТРОКИ
-             */
 
             .avito-tweaks-row {
                 display: flex;
-
                 align-items: center;
-
-                justify-content:
-                    space-between;
+                justify-content: space-between;
 
                 gap: 12px;
 
                 min-height: 34px;
             }
 
-            .avito-tweaks-row
-            + .avito-tweaks-row {
-
+            .avito-tweaks-row +
+            .avito-tweaks-row {
                 margin-top: 5px;
             }
-
-
-            /*
-             * SWITCH
-             */
 
             .avito-tweaks-switch {
                 position: relative;
 
-                display:
-                    inline-block;
-
-                flex:
-                    0 0 auto;
+                display: inline-block;
 
                 width: 42px;
-
                 height: 24px;
             }
 
@@ -1381,30 +1156,21 @@
                 position: absolute;
 
                 width: 1px;
-
                 height: 1px;
 
                 opacity: 0;
-
-                pointer-events:
-                    none;
             }
 
             .avito-tweaks-slider {
                 position: absolute;
-
                 inset: 0;
 
                 cursor: pointer;
 
                 background:
-                    rgba(255,255,255,0.24);
+                    rgba(255,255,255,.24);
 
-                border-radius:
-                    999px;
-
-                transition:
-                    background 0.18s ease;
+                border-radius: 999px;
             }
 
             .avito-tweaks-slider::before {
@@ -1413,66 +1179,43 @@
                 position: absolute;
 
                 left: 3px;
-
                 bottom: 3px;
 
                 width: 18px;
-
                 height: 18px;
 
-                background:
-                    #ffffff;
+                background: #fff;
 
-                border-radius:
-                    50%;
-
-                box-shadow:
-                    0 1px 4px
-                    rgba(0,0,0,0.30);
+                border-radius: 50%;
 
                 transition:
-                    transform 0.18s ease;
+                    transform .18s ease;
             }
 
             .avito-tweaks-switch
-            input:checked
-            + .avito-tweaks-slider {
-
-                background:
-                    #00aaff;
+            input:checked +
+            .avito-tweaks-slider {
+                background: #00aaff;
             }
 
             .avito-tweaks-switch
-            input:checked
-            + .avito-tweaks-slider::before {
-
+            input:checked +
+            .avito-tweaks-slider::before {
                 transform:
                     translateX(18px);
             }
 
-
-            /*
-             * РАЗДЕЛИТЕЛЬ
-             */
-
             .avito-tweaks-separator {
                 height: 1px;
 
-                margin:
-                    10px 0;
+                margin: 10px 0;
 
                 background:
-                    rgba(255,255,255,0.10);
+                    rgba(255,255,255,.10);
             }
-
-
-            /*
-             * ЧЁРНЫЙ СПИСОК
-             */
 
             #avito-tweaks-blacklist {
                 display: flex;
-
                 flex-wrap: wrap;
 
                 gap: 6px;
@@ -1484,47 +1227,33 @@
                 overflow-y: auto;
             }
 
-
-            /*
-             * Плашка пользователя
-             */
-
             .avito-tweaks-blacklist-chip {
-                display:
-                    inline-flex;
+                display: inline-flex;
+                align-items: center;
 
-                align-items:
-                    center;
-
-                max-width:
-                    100%;
+                max-width: 100%;
 
                 padding:
                     4px 6px 4px 9px;
 
-                color:
-                    #eeeeee;
+                color: #eee;
 
                 background:
-                    rgba(255,255,255,0.10);
+                    rgba(255,255,255,.10);
 
                 border:
                     1px solid
-                    rgba(255,255,255,0.08);
+                    rgba(255,255,255,.08);
 
-                border-radius:
-                    10px;
+                border-radius: 10px;
 
-                font-size:
-                    11px;
+                font-size: 11px;
             }
 
             .avito-tweaks-blacklist-name {
-                overflow:
-                    hidden;
+                overflow: hidden;
 
-                white-space:
-                    nowrap;
+                white-space: nowrap;
 
                 text-overflow:
                     ellipsis;
@@ -1532,55 +1261,31 @@
 
             .avito-tweaks-blacklist-remove {
                 display: flex;
-
-                align-items:
-                    center;
-
-                justify-content:
-                    center;
-
-                flex:
-                    0 0 auto;
+                align-items: center;
+                justify-content: center;
 
                 width: 17px;
-
                 height: 17px;
 
-                margin-left:
-                    4px;
-
-                border-radius:
-                    50%;
+                margin-left: 4px;
 
                 color:
-                    rgba(255,255,255,0.65);
+                    rgba(255,255,255,.65);
 
-                font-size:
-                    15px;
+                font-size: 15px;
 
-                line-height:
-                    1;
-
-                cursor:
-                    pointer;
+                cursor: pointer;
             }
 
             .avito-tweaks-blacklist-remove:hover {
-                color:
-                    #ffffff;
-
-                background:
-                    rgba(255,255,255,0.12);
+                color: #fff;
             }
 
             #avito-tweaks-blacklist-empty {
-                margin-top: 7px;
-
                 color:
-                    rgba(255,255,255,0.35);
+                    rgba(255,255,255,.35);
 
-                font-size:
-                    10px;
+                font-size: 10px;
             }
         `;
 
@@ -1590,18 +1295,15 @@
     }
 
 
-    /*
-     * ============================================================
-     * UI — SWITCH
-     * ============================================================
-     */
+    /* =========================================================
+       UI
+       ========================================================= */
 
     function createSwitch(
-        labelText,
+        text,
         checked,
         onChange
     ) {
-
         const row =
             document.createElement(
                 'div'
@@ -1610,15 +1312,13 @@
         row.className =
             'avito-tweaks-row';
 
-
-        const text =
+        const labelText =
             document.createElement(
                 'span'
             );
 
-        text.textContent =
-            labelText;
-
+        labelText.textContent =
+            text;
 
         const label =
             document.createElement(
@@ -1627,7 +1327,6 @@
 
         label.className =
             'avito-tweaks-switch';
-
 
         const input =
             document.createElement(
@@ -1640,7 +1339,6 @@
         input.checked =
             checked;
 
-
         const slider =
             document.createElement(
                 'span'
@@ -1649,11 +1347,9 @@
         slider.className =
             'avito-tweaks-slider';
 
-
         input.addEventListener(
             'change',
             () => {
-
                 onChange(
                     input.checked
                 );
@@ -1662,31 +1358,21 @@
             }
         );
 
-
         label.append(
             input,
             slider
         );
 
-
         row.append(
-            text,
+            labelText,
             label
         );
-
 
         return row;
     }
 
 
-    /*
-     * ============================================================
-     * РЕНДЕР ЧЁРНОГО СПИСКА
-     * ============================================================
-     */
-
     function renderBlacklist() {
-
         const container =
             document.getElementById(
                 'avito-tweaks-blacklist'
@@ -1696,14 +1382,11 @@
             return;
         }
 
-        container.innerHTML =
-            '';
-
+        container.replaceChildren();
 
         if (
             blacklist.length === 0
         ) {
-
             const empty =
                 document.createElement(
                     'div'
@@ -1722,12 +1405,7 @@
             return;
         }
 
-
-        for (
-            const entry
-            of blacklist
-        ) {
-
+        for (const entry of blacklist) {
             const chip =
                 document.createElement(
                     'div'
@@ -1736,13 +1414,8 @@
             chip.className =
                 'avito-tweaks-blacklist-chip';
 
-            /*
-             * При наведении можно посмотреть
-             * настоящий ID.
-             */
             chip.title =
                 entry.id;
-
 
             const name =
                 document.createElement(
@@ -1754,7 +1427,6 @@
 
             name.textContent =
                 entry.name;
-
 
             const remove =
                 document.createElement(
@@ -1768,13 +1440,11 @@
                 '×';
 
             remove.title =
-                'Удалить из чёрного списка';
-
+                'Удалить из ЧС';
 
             remove.addEventListener(
                 'click',
                 event => {
-
                     event.stopPropagation();
 
                     removeSellerFromBlacklist(
@@ -1783,12 +1453,10 @@
                 }
             );
 
-
             chip.append(
                 name,
                 remove
             );
-
 
             container.appendChild(
                 chip
@@ -1797,17 +1465,10 @@
     }
 
 
-    /*
-     * ============================================================
-     * COLLAPSE
-     * ============================================================
-     */
-
     function updateCollapsedState(
         widget,
         button
     ) {
-
         widget.classList.toggle(
             'avito-tweaks-collapsed',
             widgetCollapsed
@@ -1825,17 +1486,16 @@
     }
 
 
-    /*
-     * ============================================================
-     * ПОЛОЖЕНИЕ ВИДЖЕТА
-     * ============================================================
-     */
+    /* =========================================================
+       ПОЗИЦИЯ И DRAG
+       ========================================================= */
 
-    function restoreWidgetPosition(widget) {
-
+    function restoreWidgetPosition(
+        widget
+    ) {
         const saved =
-            GM_getValue(
-                GM_WIDGET_POSITION,
+            storageGet(
+                KEY_WIDGET_POSITION,
                 null
             );
 
@@ -1847,7 +1507,6 @@
             return;
         }
 
-
         const maxLeft =
             Math.max(
                 0,
@@ -1855,14 +1514,12 @@
                 widget.offsetWidth
             );
 
-
         const maxTop =
             Math.max(
                 0,
                 window.innerHeight -
                 widget.offsetHeight
             );
-
 
         widget.style.left =
             Math.min(
@@ -1873,7 +1530,6 @@
                 maxLeft
             ) + 'px';
 
-
         widget.style.top =
             Math.min(
                 Math.max(
@@ -1883,7 +1539,6 @@
                 maxTop
             ) + 'px';
 
-
         widget.style.right =
             'auto';
 
@@ -1892,13 +1547,14 @@
     }
 
 
-    function saveWidgetPosition(widget) {
-
+    function saveWidgetPosition(
+        widget
+    ) {
         const rect =
             widget.getBoundingClientRect();
 
-        GM_setValue(
-            GM_WIDGET_POSITION,
+        storageSet(
+            KEY_WIDGET_POSITION,
             {
                 left:
                     Math.round(
@@ -1914,73 +1570,11 @@
     }
 
 
-    function keepWidgetInsideWindow(widget) {
-
-        const rect =
-            widget.getBoundingClientRect();
-
-
-        const maxLeft =
-            Math.max(
-                0,
-                window.innerWidth -
-                widget.offsetWidth
-            );
-
-
-        const maxTop =
-            Math.max(
-                0,
-                window.innerHeight -
-                widget.offsetHeight
-            );
-
-
-        widget.style.left =
-            Math.min(
-                Math.max(
-                    0,
-                    rect.left
-                ),
-                maxLeft
-            ) + 'px';
-
-
-        widget.style.top =
-            Math.min(
-                Math.max(
-                    0,
-                    rect.top
-                ),
-                maxTop
-            ) + 'px';
-
-
-        widget.style.right =
-            'auto';
-
-        widget.style.bottom =
-            'auto';
-
-
-        saveWidgetPosition(
-            widget
-        );
-    }
-
-
-    /*
-     * ============================================================
-     * DRAG
-     * ============================================================
-     */
-
     function makeWidgetDraggable(
         widget,
         handle,
         collapseButton
     ) {
-
         let dragging =
             false;
 
@@ -1990,11 +1584,9 @@
         let offsetY =
             0;
 
-
         handle.addEventListener(
             'pointerdown',
             event => {
-
                 if (
                     event.button !== 0 ||
                     collapseButton.contains(
@@ -2004,59 +1596,47 @@
                     return;
                 }
 
-
                 const rect =
-                    widget.getBoundingClientRect();
-
+                    widget
+                        .getBoundingClientRect();
 
                 dragging =
                     true;
-
 
                 offsetX =
                     event.clientX -
                     rect.left;
 
-
                 offsetY =
                     event.clientY -
                     rect.top;
 
-
                 widget.style.left =
                     rect.left + 'px';
-
 
                 widget.style.top =
                     rect.top + 'px';
 
-
                 widget.style.right =
                     'auto';
 
-
                 widget.style.bottom =
                     'auto';
-
 
                 handle.setPointerCapture(
                     event.pointerId
                 );
 
-
                 event.preventDefault();
             }
         );
 
-
         handle.addEventListener(
             'pointermove',
             event => {
-
                 if (!dragging) {
                     return;
                 }
-
 
                 const maxLeft =
                     Math.max(
@@ -2065,14 +1645,12 @@
                         widget.offsetWidth
                     );
 
-
                 const maxTop =
                     Math.max(
                         0,
                         window.innerHeight -
                         widget.offsetHeight
                     );
-
 
                 widget.style.left =
                     Math.min(
@@ -2083,7 +1661,6 @@
                         ),
                         maxLeft
                     ) + 'px';
-
 
                 widget.style.top =
                     Math.min(
@@ -2097,76 +1674,50 @@
             }
         );
 
-
-        function stopDragging(event) {
-
+        function stop(event) {
             if (!dragging) {
                 return;
             }
 
-
             dragging =
                 false;
 
-
-            if (
-                handle.hasPointerCapture(
-                    event.pointerId
-                )
-            ) {
-
-                handle.releasePointerCapture(
-                    event.pointerId
-                );
+            try {
+                if (
+                    handle.hasPointerCapture(
+                        event.pointerId
+                    )
+                ) {
+                    handle.releasePointerCapture(
+                        event.pointerId
+                    );
+                }
+            } catch {
+                // ignore
             }
-
 
             saveWidgetPosition(
                 widget
             );
         }
 
-
         handle.addEventListener(
             'pointerup',
-            stopDragging
+            stop
         );
-
 
         handle.addEventListener(
             'pointercancel',
-            stopDragging
-        );
-
-
-        window.addEventListener(
-            'resize',
-            () => {
-
-                if (
-                    widget.style.left === '' ||
-                    widget.style.top === ''
-                ) {
-                    return;
-                }
-
-
-                keepWidgetInsideWindow(
-                    widget
-                );
-            }
+            stop
         );
     }
 
 
-    /*
-     * ============================================================
-     * СОЗДАНИЕ ВИДЖЕТА
-     * ============================================================
-     */
+    /* =========================================================
+       СОЗДАНИЕ ВИДЖЕТА
+       ========================================================= */
 
     function createWidget() {
-
         if (
             document.getElementById(
                 'avito-tweaks-widget'
@@ -2174,7 +1725,6 @@
         ) {
             return;
         }
-
 
         const widget =
             document.createElement(
@@ -2184,11 +1734,6 @@
         widget.id =
             'avito-tweaks-widget';
 
-
-        /*
-         * HEADER
-         */
-
         const header =
             document.createElement(
                 'div'
@@ -2197,7 +1742,6 @@
         header.id =
             'avito-tweaks-header';
 
-
         const headerLeft =
             document.createElement(
                 'div'
@@ -2205,7 +1749,6 @@
 
         headerLeft.id =
             'avito-tweaks-header-left';
-
 
         const title =
             document.createElement(
@@ -2218,11 +1761,9 @@
         title.textContent =
             'Avito Tweaks';
 
-
         headerLeft.appendChild(
             title
         );
-
 
         const collapseButton =
             document.createElement(
@@ -2235,11 +1776,6 @@
         collapseButton.type =
             'button';
 
-
-        /*
-         * BODY
-         */
-
         const body =
             document.createElement(
                 'div'
@@ -2247,7 +1783,6 @@
 
         body.id =
             'avito-tweaks-body';
-
 
         const subtitle =
             document.createElement(
@@ -2261,75 +1796,53 @@
             'Скрывать объявления';
 
 
-        /*
-         * Забронировано
-         */
-
         const reservedSwitch =
             createSwitch(
                 'Забронировано',
                 hideReserved,
-
                 value => {
-
                     hideReserved =
                         value;
 
-                    GM_setValue(
-                        GM_HIDE_RESERVED,
+                    storageSet(
+                        KEY_HIDE_RESERVED,
                         value
                     );
                 }
             );
 
-
-        /*
-         * Просмотрено
-         */
 
         const viewedSwitch =
             createSwitch(
                 'Просмотрено',
                 hideViewed,
-
                 value => {
-
                     hideViewed =
                         value;
 
-                    GM_setValue(
-                        GM_HIDE_VIEWED,
+                    storageSet(
+                        KEY_HIDE_VIEWED,
                         value
                     );
                 }
             );
 
-
-        /*
-         * Без доставки
-         */
 
         const noDeliverySwitch =
             createSwitch(
                 'Без доставки',
                 hideNoDelivery,
-
                 value => {
-
                     hideNoDelivery =
                         value;
 
-                    GM_setValue(
-                        GM_HIDE_NO_DELIVERY,
+                    storageSet(
+                        KEY_HIDE_NO_DELIVERY,
                         value
                     );
                 }
             );
 
-
-        /*
-         * Разделитель
-         */
 
         const separator =
             document.createElement(
@@ -2340,31 +1853,21 @@
             'avito-tweaks-separator';
 
 
-        /*
-         * Чёрный список
-         */
-
         const blacklistSwitch =
             createSwitch(
                 'Чёрный список',
                 hideBlacklist,
-
                 value => {
-
                     hideBlacklist =
                         value;
 
-                    GM_setValue(
-                        GM_HIDE_BLACKLIST,
+                    storageSet(
+                        KEY_HIDE_BLACKLIST,
                         value
                     );
                 }
             );
 
-
-        /*
-         * Плашки ЧС
-         */
 
         const blacklistContainer =
             document.createElement(
@@ -2403,16 +1906,8 @@
         );
 
 
-        /*
-         * Чёрный список
-         */
-
         renderBlacklist();
 
-
-        /*
-         * Свернуть / развернуть
-         */
 
         updateCollapsedState(
             widget,
@@ -2423,39 +1918,19 @@
         collapseButton.addEventListener(
             'click',
             event => {
-
                 event.stopPropagation();
-
 
                 widgetCollapsed =
                     !widgetCollapsed;
 
-
-                GM_setValue(
-                    GM_WIDGET_COLLAPSED,
+                storageSet(
+                    KEY_WIDGET_COLLAPSED,
                     widgetCollapsed
                 );
-
 
                 updateCollapsedState(
                     widget,
                     collapseButton
-                );
-
-
-                requestAnimationFrame(
-                    () => {
-
-                        if (
-                            widget.style.left !== '' &&
-                            widget.style.top !== ''
-                        ) {
-
-                            keepWidgetInsideWindow(
-                                widget
-                            );
-                        }
-                    }
                 );
             }
         );
@@ -2474,87 +1949,59 @@
     }
 
 
-    /*
-     * ============================================================
-     * MUTATION OBSERVER
-     * ============================================================
-     */
+    /* =========================================================
+       MUTATION OBSERVER
+       ========================================================= */
 
     function startObserver() {
-
         const observer =
             new MutationObserver(
                 mutations => {
-
                     for (
                         const mutation
                         of mutations
                     ) {
-
-                        const targetElement =
-                            mutation.target.nodeType ===
+                        const target =
+                            mutation.target
+                                .nodeType ===
                             Node.TEXT_NODE
-
                                 ? mutation.target
                                     .parentElement
-
                                 : mutation.target;
 
-
-                        /*
-                         * Собственный виджет игнорируем.
-                         */
-
                         if (
-                            targetElement instanceof Element &&
-
-                            targetElement.closest(
+                            target &&
+                            target.closest &&
+                            target.closest(
                                 '#avito-tweaks-widget'
                             )
                         ) {
                             continue;
                         }
 
-
-                        /*
-                         * Наши кнопки "В ЧС"
-                         * тоже не должны запускать
-                         * бесконечное обновление.
-                         */
-
                         if (
-                            targetElement instanceof Element &&
-
-                            targetElement.closest(
+                            target &&
+                            target.closest &&
+                            target.closest(
                                 '.avito-tweaks-add-blacklist'
                             )
                         ) {
                             continue;
                         }
 
-
                         scheduleRefresh();
-
                         break;
                     }
                 }
             );
 
-
         observer.observe(
             document.body,
             {
-                childList:
-                    true,
-
-                subtree:
-                    true,
-
-                characterData:
-                    true,
-
-                attributes:
-                    true,
+                childList: true,
+                subtree: true,
+                characterData: true,
+                attributes: true,
 
                 attributeFilter: [
                     'data-icon-name',
@@ -2566,19 +2013,15 @@
     }
 
 
-    /*
-     * ============================================================
-     * START
-     * ============================================================
-     */
+    /* =========================================================
+       START
+       ========================================================= */
 
     function start() {
-
         if (
             !document.body ||
             !document.head
         ) {
-
             requestAnimationFrame(
                 start
             );
@@ -2586,6 +2029,11 @@
             return;
         }
 
+        /*
+         * Миграцию делаем только когда страница
+         * уже действительно существует.
+         */
+        migrateOldSettings();
 
         addStyles();
 
@@ -2594,6 +2042,10 @@
         refreshAll();
 
         startObserver();
+
+        console.log(
+            'Avito Tweaks v4.2 запущен'
+        );
     }
 
 
