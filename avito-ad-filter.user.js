@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Avito Tweaks
 // @namespace    https://www.avito.ru/
-// @version      0.3
+// @version      0.4
 // @description  Скрывает забронированные и просмотренные объявления, а также объявления без доставки и даже по Чёрному Списку.
 // @match        https://www.avito.ru/*
 // @grant        none
