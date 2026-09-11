@@ -38,8 +38,8 @@
     /*
      * Ссылки продавцов:
      *
-     * /brands/<ID>
-     * /user/<ID>/profile
+     * /brands/<ID или slug>
+     * /user/<ID или slug>/profile
      */
     const SELLER_LINK_SELECTOR = [
         'a[href^="/brands/"]',
@@ -322,10 +322,6 @@
                         );
                     }
 
-                    /*
-                     * Map одновременно удаляет
-                     * дубликаты одинаковых ID.
-                     */
                     const unique =
                         new Map();
 
@@ -360,7 +356,7 @@
                     }
 
                     /*
-                     * Именно ЗАМЕНЯЕМ старый список.
+                     * Полностью заменяем текущий список.
                      */
                     blacklist =
                         Array.from(
@@ -410,7 +406,7 @@
 
     /*
      * ============================================================
-     * ID ПРОДАВЦА
+     * ID / SLUG ПРОДАВЦА
      * ============================================================
      */
 
@@ -444,34 +440,47 @@
 
 
         /*
-         * Компания:
+         * Компания / бренд.
+         *
+         * Поддерживаем:
          *
          * /brands/9f02d3011e749e044cf4e382b49e20ae
+         * /brands/hps_store
+         * /brands/hello-ps-store
+         *
+         * Берём целиком сегмент после /brands/
+         * до следующего слеша.
          */
 
         let match =
             path.match(
-                /^\/brands\/([a-zA-Z0-9]+)(?:\/|$)/
+                /^\/brands\/([^/]+)(?:\/|$)/
             );
 
         if (match) {
-            return match[1];
+            return decodeURIComponent(
+                match[1]
+            );
         }
 
 
         /*
-         * Пользователь:
+         * Обычный пользователь.
          *
-         * /user/d3b0.../profile
+         * /user/d3b0b6466577ad9ba894a979173c8765/profile
+         *
+         * Также не ограничиваем ID только буквами/цифрами.
          */
 
         match =
             path.match(
-                /^\/user\/([a-zA-Z0-9]+)(?:\/|$)/
+                /^\/user\/([^/]+)(?:\/|$)/
             );
 
         if (match) {
-            return match[1];
+            return decodeURIComponent(
+                match[1]
+            );
         }
 
         return null;
@@ -550,7 +559,7 @@
             if (!name) {
                 name =
                     'Продавец ' +
-                    id.slice(0, 8);
+                    id;
             }
 
 
@@ -576,10 +585,6 @@
         if (!(item instanceof HTMLElement)) {
             return;
         }
-
-        /*
-         * Не добавляем вторую кнопку.
-         */
 
         if (
             item.querySelector(
@@ -1153,10 +1158,6 @@
             }
 
 
-            /*
-             * Главная кнопка свернуть
-             */
-
             #avito-tweaks-collapse {
                 display: flex;
                 align-items: center;
@@ -1362,7 +1363,7 @@
 
             /*
              * ====================================================
-             * КНОПКИ ЧЁРНОГО СПИСКА
+             * КНОПКИ ЧС
              * ====================================================
              */
 
@@ -1424,7 +1425,7 @@
 
             /*
              * ====================================================
-             * ОТДЕЛЬНОЕ ОКНО ЧЁРНОГО СПИСКА
+             * ОТДЕЛЬНОЕ ОКНО ЧС
              * ====================================================
              */
 
@@ -1478,10 +1479,6 @@
                 box-sizing: border-box;
             }
 
-
-            /*
-             * Header отдельного окна
-             */
 
             #avito-tweaks-blacklist-window-header {
                 display: flex;
@@ -1557,10 +1554,6 @@
             }
 
 
-            /*
-             * Тело отдельного окна
-             */
-
             #avito-tweaks-blacklist-window-body {
                 padding: 13px;
 
@@ -1569,10 +1562,6 @@
                 overflow-y: auto;
             }
 
-
-            /*
-             * Сам список
-             */
 
             #avito-tweaks-blacklist {
                 display: flex;
@@ -1585,10 +1574,6 @@
                 gap: 7px;
             }
 
-
-            /*
-             * Плашка продавца
-             */
 
             .avito-tweaks-blacklist-chip {
                 display: inline-flex;
@@ -1783,9 +1768,6 @@
             );
 
 
-        /*
-         * Окно может быть закрыто.
-         */
         if (!container) {
             return;
         }
@@ -1830,10 +1812,6 @@
             chip.className =
                 'avito-tweaks-blacklist-chip';
 
-
-            /*
-             * ID видно по наведению мыши.
-             */
 
             chip.title =
                 entry.id;
@@ -1898,7 +1876,7 @@
 
     /*
      * ============================================================
-     * ОТДЕЛЬНОЕ ОКНО ЧС
+     * ОКНО ЧС
      * ============================================================
      */
 
@@ -1908,11 +1886,6 @@
                 'avito-tweaks-blacklist-window'
             );
 
-
-        /*
-         * Если уже открыто — кнопка "Список"
-         * закрывает его.
-         */
 
         if (existing) {
             existing.remove();
@@ -2037,16 +2010,8 @@
         );
 
 
-        /*
-         * Наполняем список.
-         */
-
         renderBlacklist();
 
-
-        /*
-         * Закрытие.
-         */
 
         closeButton.addEventListener(
             'click',
@@ -2059,10 +2024,6 @@
         );
 
 
-        /*
-         * Перетаскивание окна ЧС.
-         */
-
         makeFloatingWindowDraggable(
             windowEl,
             header,
@@ -2073,7 +2034,7 @@
 
     /*
      * ============================================================
-     * DRAG ОТДЕЛЬНОГО ОКНА
+     * DRAG ОКНА ЧС
      * ============================================================
      */
 
@@ -2249,7 +2210,7 @@
 
     /*
      * ============================================================
-     * COLLAPSE ГЛАВНОГО ОКНА
+     * COLLAPSE
      * ============================================================
      */
 
@@ -2278,7 +2239,7 @@
 
     /*
      * ============================================================
-     * ПОЛОЖЕНИЕ ГЛАВНОГО ВИДЖЕТА
+     * ПОЗИЦИЯ ГЛАВНОГО ВИДЖЕТА
      * ============================================================
      */
 
@@ -2830,7 +2791,7 @@
 
 
         /*
-         * ЧЁРНЫЙ СПИСОК SWITCH
+         * ЧЁРНЫЙ СПИСОК
          */
 
         const blacklistSwitch =
@@ -2866,10 +2827,6 @@
             'avito-tweaks-blacklist-actions';
 
 
-        /*
-         * Список
-         */
-
         const listButton =
             document.createElement(
                 'button'
@@ -2891,10 +2848,6 @@
         listButton.title =
             'Открыть чёрный список';
 
-
-        /*
-         * Экспорт
-         */
 
         const exportButton =
             document.createElement(
@@ -2918,10 +2871,6 @@
             'Экспортировать ЧС';
 
 
-        /*
-         * Импорт
-         */
-
         const importButton =
             document.createElement(
                 'button'
@@ -2943,10 +2892,6 @@
         importButton.title =
             'Импортировать ЧС';
 
-
-        /*
-         * Невидимый input файла
-         */
 
         const importFileInput =
             document.createElement(
@@ -2998,11 +2943,6 @@
                 event.preventDefault();
                 event.stopPropagation();
 
-                /*
-                 * Позволяет выбрать тот же файл
-                 * несколько раз подряд.
-                 */
-
                 importFileInput.value =
                     '';
 
@@ -3052,10 +2992,6 @@
         );
 
 
-        /*
-         * BODY
-         */
-
         body.append(
             subtitle,
             reservedSwitch,
@@ -3068,19 +3004,11 @@
         );
 
 
-        /*
-         * HEADER
-         */
-
         header.append(
             headerLeft,
             collapseButton
         );
 
-
-        /*
-         * WIDGET
-         */
 
         widget.append(
             header,
@@ -3180,10 +3108,6 @@
                                 : mutation.target;
 
 
-                        /*
-                         * Главный виджет игнорируем.
-                         */
-
                         if (
                             targetElement
                                 instanceof Element &&
@@ -3196,10 +3120,6 @@
                         }
 
 
-                        /*
-                         * Окно ЧС игнорируем.
-                         */
-
                         if (
                             targetElement
                                 instanceof Element &&
@@ -3211,11 +3131,6 @@
                             continue;
                         }
 
-
-                        /*
-                         * Наши кнопки "В ЧС"
-                         * тоже игнорируем.
-                         */
 
                         if (
                             targetElement
