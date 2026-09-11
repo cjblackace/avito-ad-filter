@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Avito Tweaks
 // @namespace    https://www.avito.ru/
-// @version      0.2
+// @version      0.3
 // @description  Скрывает забронированные и просмотренные объявления, а также объявления без доставки и даже по Чёрному Списку.
 // @match        https://www.avito.ru/*
 // @grant        none
@@ -15,9 +15,9 @@
     'use strict';
 
     /*
-     * =========================
-     * СЕЛЕКТОРЫ
-     * =========================
+     * ============================================================
+     * СЕЛЕКТОРЫ КАРТОЧЕК
+     * ============================================================
      */
 
     const REGULAR_ITEM_SELECTOR =
@@ -35,9 +35,22 @@
         '[data-icon-name="delivery"]';
 
     /*
-     * =========================
-     * STORAGE
-     * =========================
+     * Ссылки продавцов:
+     *
+     * /brands/<ID>
+     * /user/<ID>/profile
+     */
+    const SELLER_LINK_SELECTOR = [
+        'a[href^="/brands/"]',
+        'a[href^="/user/"]',
+        'a[href*="avito.ru/brands/"]',
+        'a[href*="avito.ru/user/"]'
+    ].join(', ');
+
+    /*
+     * ============================================================
+     * LOCAL STORAGE
+     * ============================================================
      */
 
     const STORAGE_HIDE_RESERVED =
@@ -52,8 +65,18 @@
     const STORAGE_HIDE_BLACKLIST =
         'avitoTweaks_hideBlacklist';
 
+    /*
+     * Новый формат ЧС:
+     *
+     * [
+     *   {
+     *      id: "...",
+     *      name: "Impact"
+     *   }
+     * ]
+     */
     const STORAGE_BLACKLIST =
-        'avitoTweaks_blacklist';
+        'avitoTweaks_blacklistV2';
 
     const STORAGE_WIDGET_POSITION =
         'avitoTweaks_widgetPosition';
@@ -62,9 +85,9 @@
         'avitoTweaks_widgetCollapsed';
 
     /*
-     * =========================
-     * CSS-КЛАССЫ
-     * =========================
+     * ============================================================
+     * CSS-КЛАССЫ СКРЫТИЯ
+     * ============================================================
      */
 
     const HIDDEN_RESERVED_CLASS =
@@ -80,9 +103,9 @@
         'avito-tweaks-hidden-blacklist';
 
     /*
-     * =========================
-     * СОСТОЯНИЯ
-     * =========================
+     * ============================================================
+     * СОСТОЯНИЕ
+     * ============================================================
      */
 
     let hideReserved =
@@ -94,92 +117,424 @@
     let hideNoDelivery =
         localStorage.getItem(STORAGE_HIDE_NO_DELIVERY) === 'true';
 
+    /*
+     * Чёрный список по умолчанию выключен.
+     */
     let hideBlacklist =
         localStorage.getItem(STORAGE_HIDE_BLACKLIST) === 'true';
-
-    let blacklistRaw =
-        localStorage.getItem(STORAGE_BLACKLIST) || '';
 
     let widgetCollapsed =
         localStorage.getItem(STORAGE_WIDGET_COLLAPSED) === 'true';
 
+    let blacklist = loadBlacklist();
+
     let filterScheduled = false;
 
-    /*
-     * Готовый Set с никами.
-     */
-    let blacklistNames = new Set();
 
     /*
-     * =========================
-     * ТЕКСТ
-     * =========================
+     * ============================================================
+     * ОБЩИЕ ФУНКЦИИ
+     * ============================================================
      */
 
     function normalizeText(text) {
         return String(text || '')
             .replace(/\s+/g, ' ')
-            .trim()
-            .toLowerCase();
+            .trim();
     }
 
+
     /*
-     * =========================
+     * ============================================================
      * ЧЁРНЫЙ СПИСОК
-     * =========================
+     * ============================================================
      */
 
-    function updateBlacklistNames() {
-        blacklistNames = new Set(
-            blacklistRaw
-                .split(/[\n,;]+/)
-                .map(name => normalizeText(name))
-                .filter(Boolean)
+    function loadBlacklist() {
+        try {
+            const value =
+                JSON.parse(
+                    localStorage.getItem(STORAGE_BLACKLIST) || '[]'
+                );
+
+            if (!Array.isArray(value)) {
+                return [];
+            }
+
+            return value.filter(entry =>
+                entry &&
+                typeof entry.id === 'string' &&
+                entry.id.length > 0
+            );
+
+        } catch (error) {
+            console.warn(
+                'Avito Tweaks: не удалось загрузить ЧС.',
+                error
+            );
+
+            return [];
+        }
+    }
+
+    function saveBlacklist() {
+        localStorage.setItem(
+            STORAGE_BLACKLIST,
+            JSON.stringify(blacklist)
         );
     }
 
-    updateBlacklistNames();
+    function isSellerBlacklisted(id) {
+        return blacklist.some(entry =>
+            entry.id === id
+        );
+    }
 
-    function isBlacklisted(item) {
-        if (
-            !hideBlacklist ||
-            blacklistNames.size === 0
-        ) {
-            return false;
+    function addSellerToBlacklist(id, name) {
+        if (!id) {
+            return;
+        }
+
+        if (isSellerBlacklisted(id)) {
+            return;
+        }
+
+        blacklist.push({
+            id,
+            name: normalizeText(name) || id
+        });
+
+        saveBlacklist();
+
+        renderBlacklist();
+        updateSellerButtons();
+        filterAllItems();
+    }
+
+    function removeSellerFromBlacklist(id) {
+        blacklist =
+            blacklist.filter(entry =>
+                entry.id !== id
+            );
+
+        saveBlacklist();
+
+        renderBlacklist();
+        updateSellerButtons();
+        filterAllItems();
+    }
+
+
+    /*
+     * ============================================================
+     * ПОЛУЧЕНИЕ ID ПРОДАВЦА
+     * ============================================================
+     */
+
+    function getSellerIdFromLink(link) {
+        if (!(link instanceof HTMLAnchorElement)) {
+            return null;
+        }
+
+        let url;
+
+        try {
+            url = new URL(
+                link.getAttribute('href'),
+                location.origin
+            );
+        } catch {
+            return null;
+        }
+
+        const path =
+            url.pathname;
+
+        /*
+         * Компания / бренд
+         *
+         * /brands/9f02d3011e749e044cf4e382b49e20ae
+         */
+        let match =
+            path.match(
+                /^\/brands\/([a-zA-Z0-9]+)/
+            );
+
+        if (match) {
+            return match[1];
         }
 
         /*
-         * Avito выводит ник продавца обычным <p>,
-         * без data-marker и с динамическими CSS-классами.
+         * Обычный пользователь
          *
-         * Поэтому проверяем все <p> внутри карточки
-         * и ищем точное совпадение текста.
+         * /user/d3b0b6466577ad9ba894a979173c8765/profile
          */
-        const paragraphs =
-            item.querySelectorAll('p');
+        match =
+            path.match(
+                /^\/user\/([a-zA-Z0-9]+)(?:\/|$)/
+            );
 
-        for (const paragraph of paragraphs) {
-            const text =
-                normalizeText(
-                    paragraph.innerText ||
-                    paragraph.textContent
-                );
-
-            if (blacklistNames.has(text)) {
-                return true;
-            }
+        if (match) {
+            return match[1];
         }
 
-        return false;
+        return null;
     }
 
+
     /*
-     * =========================
-     * КОНТЕЙНЕРЫ
-     * =========================
+     * ============================================================
+     * ИНФОРМАЦИЯ О ПРОДАВЦЕ В КАРТОЧКЕ
+     * ============================================================
+     */
+
+    function findSellerInfo(item) {
+        if (!(item instanceof HTMLElement)) {
+            return null;
+        }
+
+        const links =
+            item.querySelectorAll(
+                SELLER_LINK_SELECTOR
+            );
+
+        for (const link of links) {
+            const id =
+                getSellerIdFromLink(link);
+
+            if (!id) {
+                continue;
+            }
+
+            /*
+             * Имя продавца обычно находится
+             * в <p> внутри ссылки.
+             */
+            let nameElement =
+                link.querySelector('p');
+
+            /*
+             * На случай иной разметки Avito.
+             */
+            if (!nameElement) {
+                const parent =
+                    link.parentElement;
+
+                nameElement =
+                    parent?.querySelector('p') || null;
+            }
+
+            let name = '';
+
+            if (nameElement) {
+                name =
+                    normalizeText(
+                        nameElement.innerText ||
+                        nameElement.textContent
+                    );
+            }
+
+            /*
+             * Если <p> не нашли, пробуем текст ссылки.
+             */
+            if (!name) {
+                name =
+                    normalizeText(
+                        link.innerText ||
+                        link.textContent
+                    );
+            }
+
+            if (!name) {
+                name =
+                    'Продавец ' + id.slice(0, 8);
+            }
+
+            return {
+                id,
+                name,
+                link,
+                nameElement
+            };
+        }
+
+        return null;
+    }
+
+
+    /*
+     * ============================================================
+     * КНОПКА "В ЧС"
+     * ============================================================
+     */
+
+    function addBlacklistButton(item) {
+        if (!(item instanceof HTMLElement)) {
+            return;
+        }
+
+        /*
+         * Уже добавляли кнопку в эту карточку.
+         */
+        if (
+            item.querySelector(
+                '.avito-tweaks-add-blacklist'
+            )
+        ) {
+            return;
+        }
+
+        const seller =
+            findSellerInfo(item);
+
+        if (!seller) {
+            return;
+        }
+
+        /*
+         * Используем span, а не настоящий <button>,
+         * потому что имя продавца часто находится внутри <a>.
+         *
+         * Вложенный button внутри ссылки был бы некорректной
+         * HTML-структурой.
+         */
+        const button =
+            document.createElement('span');
+
+        button.className =
+            'avito-tweaks-add-blacklist';
+
+        button.dataset.sellerId =
+            seller.id;
+
+        button.dataset.sellerName =
+            seller.name;
+
+        button.setAttribute(
+            'role',
+            'button'
+        );
+
+        button.setAttribute(
+            'tabindex',
+            '0'
+        );
+
+        /*
+         * Ставим кнопку максимально близко к нику.
+         */
+        if (seller.nameElement) {
+            seller.nameElement.insertAdjacentElement(
+                'afterend',
+                button
+            );
+        } else {
+            seller.link.appendChild(button);
+        }
+
+        function activate(event) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            /*
+             * Чтобы клик не открыл страницу продавца.
+             */
+            if (typeof event.stopImmediatePropagation === 'function') {
+                event.stopImmediatePropagation();
+            }
+
+            if (
+                !isSellerBlacklisted(
+                    seller.id
+                )
+            ) {
+                addSellerToBlacklist(
+                    seller.id,
+                    seller.name
+                );
+            }
+
+            updateSellerButton(button);
+        }
+
+        button.addEventListener(
+            'click',
+            activate,
+            true
+        );
+
+        button.addEventListener(
+            'pointerdown',
+            event => {
+                event.stopPropagation();
+            },
+            true
+        );
+
+        button.addEventListener(
+            'keydown',
+            event => {
+                if (
+                    event.key === 'Enter' ||
+                    event.key === ' '
+                ) {
+                    activate(event);
+                }
+            }
+        );
+
+        updateSellerButton(button);
+    }
+
+    function updateSellerButton(button) {
+        const id =
+            button.dataset.sellerId;
+
+        const blacklisted =
+            isSellerBlacklisted(id);
+
+        button.classList.toggle(
+            'avito-tweaks-add-blacklist-active',
+            blacklisted
+        );
+
+        button.textContent =
+            blacklisted
+                ? 'В ЧС ✓'
+                : 'В ЧС';
+
+        button.title =
+            blacklisted
+                ? 'Продавец уже в чёрном списке'
+                : 'Добавить продавца в чёрный список';
+    }
+
+    function updateSellerButtons() {
+        document
+            .querySelectorAll(
+                '.avito-tweaks-add-blacklist'
+            )
+            .forEach(updateSellerButton);
+    }
+
+    function addBlacklistButtonsToAllItems() {
+        document
+            .querySelectorAll(ITEM_SELECTOR)
+            .forEach(addBlacklistButton);
+    }
+
+
+    /*
+     * ============================================================
+     * КОНТЕЙНЕРЫ КАРТОЧЕК
+     * ============================================================
      */
 
     function getRecommendationTarget(item) {
+        /*
+         * Для рекомендаций скрываем внешний контейнер,
+         * находящийся двумя уровнями выше.
+         */
         return (
             item.parentElement?.parentElement ||
             item.parentElement ||
@@ -220,10 +575,11 @@
         }
     }
 
+
     /*
-     * =========================
+     * ============================================================
      * ФИЛЬТРАЦИЯ
-     * =========================
+     * ============================================================
      */
 
     function filterItem(item) {
@@ -235,24 +591,32 @@
             normalizeText(
                 item.innerText ||
                 item.textContent
-            );
+            ).toLowerCase();
 
         const isReserved =
-            text.includes('забронировано');
+            text.includes(
+                'забронировано'
+            );
 
         const isViewed =
-            text.includes('просмотрено');
+            text.includes(
+                'просмотрено'
+            );
 
         const hasDelivery =
             item.querySelector(
                 DELIVERY_ICON_SELECTOR
             ) !== null;
 
-        const noDelivery =
-            !hasDelivery;
+        const seller =
+            findSellerInfo(item);
 
-        const blacklisted =
-            isBlacklisted(item);
+        const isBlacklisted =
+            seller
+                ? isSellerBlacklisted(
+                    seller.id
+                )
+                : false;
 
         const target =
             getFilterTarget(item);
@@ -261,22 +625,26 @@
 
         target.classList.toggle(
             HIDDEN_RESERVED_CLASS,
-            hideReserved && isReserved
+            hideReserved &&
+            isReserved
         );
 
         target.classList.toggle(
             HIDDEN_VIEWED_CLASS,
-            hideViewed && isViewed
+            hideViewed &&
+            isViewed
         );
 
         target.classList.toggle(
             HIDDEN_NO_DELIVERY_CLASS,
-            hideNoDelivery && noDelivery
+            hideNoDelivery &&
+            !hasDelivery
         );
 
         target.classList.toggle(
             HIDDEN_BLACKLIST_CLASS,
-            blacklisted
+            hideBlacklist &&
+            isBlacklisted
         );
     }
 
@@ -286,7 +654,12 @@
             .forEach(filterItem);
     }
 
-    function scheduleFilter() {
+    function refreshAll() {
+        addBlacklistButtonsToAllItems();
+        filterAllItems();
+    }
+
+    function scheduleRefresh() {
         if (filterScheduled) {
             return;
         }
@@ -295,14 +668,15 @@
 
         requestAnimationFrame(() => {
             filterScheduled = false;
-            filterAllItems();
+            refreshAll();
         });
     }
 
+
     /*
-     * =========================
+     * ============================================================
      * CSS
-     * =========================
+     * ============================================================
      */
 
     function addStyles() {
@@ -321,6 +695,10 @@
             'avito-tweaks-styles';
 
         style.textContent = `
+
+            /*
+             * Скрытие карточек
+             */
             .${HIDDEN_RESERVED_CLASS},
             .${HIDDEN_VIEWED_CLASS},
             .${HIDDEN_NO_DELIVERY_CLASS},
@@ -328,30 +706,109 @@
                 display: none !important;
             }
 
+
+            /*
+             * ====================================================
+             * КНОПКА "В ЧС" РЯДОМ С ПРОДАВЦОМ
+             * ====================================================
+             */
+
+            .avito-tweaks-add-blacklist {
+                display: inline-flex;
+                align-items: center;
+
+                width: max-content;
+
+                margin-left: 7px;
+                padding: 2px 6px;
+
+                vertical-align: middle;
+
+                color: #666;
+
+                background:
+                    rgba(0, 0, 0, 0.05);
+
+                border:
+                    1px solid
+                    rgba(0, 0, 0, 0.10);
+
+                border-radius: 5px;
+
+                font-family:
+                    Arial,
+                    Helvetica,
+                    sans-serif;
+
+                font-size: 10px;
+                font-weight: 500;
+                line-height: 15px;
+
+                cursor: pointer;
+                user-select: none;
+
+                transition:
+                    color 0.12s ease,
+                    background 0.12s ease,
+                    border-color 0.12s ease;
+            }
+
+            .avito-tweaks-add-blacklist:hover {
+                color: #111;
+
+                background:
+                    rgba(0, 0, 0, 0.10);
+            }
+
+            .avito-tweaks-add-blacklist-active {
+                color: #9b2525;
+
+                background:
+                    rgba(180, 40, 40, 0.08);
+
+                border-color:
+                    rgba(180, 40, 40, 0.18);
+            }
+
+
+            /*
+             * ====================================================
+             * ОСНОВНОЙ ВИДЖЕТ
+             * ====================================================
+             */
+
             #avito-tweaks-widget {
                 position: fixed;
+
                 right: 20px;
                 bottom: 20px;
+
                 z-index: 2147483647;
 
-                width: 245px;
+                width: 250px;
+
                 overflow: hidden;
 
-                color: #fff;
+                color: #ffffff;
 
                 background:
                     rgba(25, 25, 28, 0.82);
 
                 border:
-                    1px solid rgba(255, 255, 255, 0.18);
+                    1px solid
+                    rgba(255, 255, 255, 0.18);
 
                 border-radius: 14px;
 
                 box-shadow:
-                    0 8px 30px rgba(0, 0, 0, 0.30);
+                    0 8px 30px
+                    rgba(0, 0, 0, 0.30);
 
-                backdrop-filter: blur(10px);
-                -webkit-backdrop-filter: blur(10px);
+                backdrop-filter:
+                    blur(10px);
+
+                -webkit-backdrop-filter:
+                    blur(10px);
 
                 font-family:
                     Arial,
@@ -368,18 +825,24 @@
                 box-sizing: border-box;
             }
 
+
+            /*
+             * Заголовок
+             */
             #avito-tweaks-header {
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
 
-                padding: 11px 11px 11px 15px;
+                padding:
+                    11px 11px 11px 15px;
 
                 background:
                     rgba(255, 255, 255, 0.08);
 
                 border-bottom:
-                    1px solid rgba(255, 255, 255, 0.12);
+                    1px solid
+                    rgba(255, 255, 255, 0.12);
 
                 cursor: move;
                 touch-action: none;
@@ -407,6 +870,10 @@
                 letter-spacing: 0.2px;
             }
 
+
+            /*
+             * Свернуть / развернуть
+             */
             #avito-tweaks-collapse {
                 display: flex;
                 align-items: center;
@@ -424,31 +891,29 @@
                 color: #fff;
 
                 background:
-                    rgba(255, 255, 255, 0.08);
+                    rgba(255,255,255,0.08);
 
                 font-size: 18px;
                 font-weight: 700;
 
                 cursor: pointer;
-
-                transition:
-                    background 0.15s ease,
-                    transform 0.15s ease;
             }
 
             #avito-tweaks-collapse:hover {
                 background:
-                    rgba(255, 255, 255, 0.17);
+                    rgba(255,255,255,0.17);
             }
 
-            #avito-tweaks-collapse:active {
-                transform: scale(0.94);
-            }
 
+            /*
+             * Тело
+             */
             #avito-tweaks-body {
-                padding: 12px 15px 15px;
+                padding:
+                    12px 15px 15px;
 
-                max-height: 430px;
+                max-height: 500px;
+
                 opacity: 1;
 
                 transition:
@@ -470,22 +935,32 @@
 
             #avito-tweaks-widget.avito-tweaks-collapsed
             #avito-tweaks-header {
-                border-bottom-color: transparent;
+                border-bottom-color:
+                    transparent;
             }
 
+
+            /*
+             * Подзаголовок
+             */
             #avito-tweaks-subtitle {
                 margin-bottom: 8px;
 
                 color:
-                    rgba(255, 255, 255, 0.60);
+                    rgba(255,255,255,0.60);
 
                 font-size: 12px;
                 font-weight: 600;
 
                 text-transform: uppercase;
+
                 letter-spacing: 0.7px;
             }
 
+
+            /*
+             * Строки фильтров
+             */
             .avito-tweaks-row {
                 display: flex;
                 align-items: center;
@@ -501,6 +976,10 @@
                 margin-top: 5px;
             }
 
+
+            /*
+             * Переключатели
+             */
             .avito-tweaks-switch {
                 position: relative;
 
@@ -528,13 +1007,12 @@
                 cursor: pointer;
 
                 background:
-                    rgba(255, 255, 255, 0.24);
+                    rgba(255,255,255,0.24);
 
                 border-radius: 999px;
 
                 transition:
-                    background 0.18s ease,
-                    box-shadow 0.18s ease;
+                    background 0.18s ease;
             }
 
             .avito-tweaks-slider::before {
@@ -548,11 +1026,13 @@
                 width: 18px;
                 height: 18px;
 
-                background: #fff;
+                background: #ffffff;
+
                 border-radius: 50%;
 
                 box-shadow:
-                    0 1px 4px rgba(0, 0, 0, 0.30);
+                    0 1px 4px
+                    rgba(0,0,0,0.30);
 
                 transition:
                     transform 0.18s ease;
@@ -562,10 +1042,6 @@
             input:checked
             + .avito-tweaks-slider {
                 background: #00aaff;
-
-                box-shadow:
-                    0 0 0 1px
-                    rgba(0, 170, 255, 0.25);
             }
 
             .avito-tweaks-switch
@@ -575,88 +1051,117 @@
                     translateX(18px);
             }
 
+
+            /*
+             * Разделитель
+             */
             .avito-tweaks-separator {
                 height: 1px;
 
                 margin: 10px 0;
 
                 background:
-                    rgba(255, 255, 255, 0.10);
+                    rgba(255,255,255,0.10);
             }
 
-            #avito-tweaks-blacklist-area {
-                margin-top: 7px;
+
+            /*
+             * ====================================================
+             * ЧЁРНЫЙ СПИСОК — ПЛАШКИ
+             * ====================================================
+             */
+
+            #avito-tweaks-blacklist {
+                display: flex;
+                flex-wrap: wrap;
+
+                gap: 6px;
+
+                margin-top: 8px;
+
+                max-height: 110px;
+                overflow-y: auto;
             }
 
-            #avito-tweaks-blacklist-input {
-                display: block;
+            .avito-tweaks-blacklist-chip {
+                display: inline-flex;
+                align-items: center;
 
-                width: 100%;
-                height: 58px;
+                max-width: 100%;
 
-                margin-top: 6px;
-                padding: 7px 8px;
+                padding:
+                    4px 6px 4px 9px;
 
-                resize: vertical;
-
-                color: #fff;
+                color: #eeeeee;
 
                 background:
-                    rgba(0, 0, 0, 0.20);
+                    rgba(255,255,255,0.10);
 
                 border:
                     1px solid
-                    rgba(255, 255, 255, 0.15);
+                    rgba(255,255,255,0.08);
 
-                border-radius: 7px;
-
-                outline: none;
-
-                font-family:
-                    Consolas,
-                    monospace;
+                border-radius: 10px;
 
                 font-size: 11px;
-                line-height: 1.35;
-
-                user-select: text;
-
-                transition:
-                    border-color 0.15s ease,
-                    background 0.15s ease;
             }
 
-            #avito-tweaks-blacklist-input:focus {
-                border-color:
-                    rgba(0, 170, 255, 0.75);
+            .avito-tweaks-blacklist-name {
+                overflow: hidden;
+
+                white-space: nowrap;
+
+                text-overflow: ellipsis;
+            }
+
+            .avito-tweaks-blacklist-remove {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+
+                flex: 0 0 auto;
+
+                width: 17px;
+                height: 17px;
+
+                margin-left: 4px;
+
+                border-radius: 50%;
+
+                color:
+                    rgba(255,255,255,0.65);
+
+                font-size: 15px;
+                line-height: 1;
+
+                cursor: pointer;
+            }
+
+            .avito-tweaks-blacklist-remove:hover {
+                color: #ffffff;
 
                 background:
-                    rgba(0, 0, 0, 0.28);
+                    rgba(255,255,255,0.12);
             }
 
-            #avito-tweaks-blacklist-input::placeholder {
-                color:
-                    rgba(255, 255, 255, 0.35);
-            }
-
-            #avito-tweaks-blacklist-hint {
-                margin-top: 5px;
+            #avito-tweaks-blacklist-empty {
+                margin-top: 7px;
 
                 color:
-                    rgba(255, 255, 255, 0.40);
+                    rgba(255,255,255,0.35);
 
                 font-size: 10px;
-                line-height: 1.3;
             }
         `;
 
         document.head.appendChild(style);
     }
 
+
     /*
-     * =========================
-     * UI
-     * =========================
+     * ============================================================
+     * UI — ПЕРЕКЛЮЧАТЕЛЬ
+     * ============================================================
      */
 
     function createSwitch(
@@ -685,8 +1190,11 @@
         const input =
             document.createElement('input');
 
-        input.type = 'checkbox';
-        input.checked = checked;
+        input.type =
+            'checkbox';
+
+        input.checked =
+            checked;
 
         const slider =
             document.createElement('span');
@@ -715,6 +1223,105 @@
         return row;
     }
 
+
+    /*
+     * ============================================================
+     * РЕНДЕР ЧЁРНОГО СПИСКА
+     * ============================================================
+     */
+
+    function renderBlacklist() {
+        const container =
+            document.getElementById(
+                'avito-tweaks-blacklist'
+            );
+
+        if (!container) {
+            return;
+        }
+
+        container.innerHTML = '';
+
+        if (blacklist.length === 0) {
+            const empty =
+                document.createElement('div');
+
+            empty.id =
+                'avito-tweaks-blacklist-empty';
+
+            empty.textContent =
+                'Чёрный список пуст';
+
+            container.appendChild(
+                empty
+            );
+
+            return;
+        }
+
+        for (const entry of blacklist) {
+            const chip =
+                document.createElement('div');
+
+            chip.className =
+                'avito-tweaks-blacklist-chip';
+
+            /*
+             * ID можно посмотреть при наведении.
+             */
+            chip.title =
+                entry.id;
+
+            const name =
+                document.createElement('span');
+
+            name.className =
+                'avito-tweaks-blacklist-name';
+
+            name.textContent =
+                entry.name;
+
+            const remove =
+                document.createElement('span');
+
+            remove.className =
+                'avito-tweaks-blacklist-remove';
+
+            remove.textContent =
+                '×';
+
+            remove.title =
+                'Удалить из чёрного списка';
+
+            remove.addEventListener(
+                'click',
+                event => {
+                    event.stopPropagation();
+
+                    removeSellerFromBlacklist(
+                        entry.id
+                    );
+                }
+            );
+
+            chip.append(
+                name,
+                remove
+            );
+
+            container.appendChild(
+                chip
+            );
+        }
+    }
+
+
+    /*
+     * ============================================================
+     * COLLAPSE
+     * ============================================================
+     */
+
     function updateCollapsedState(
         widget,
         button
@@ -735,25 +1342,26 @@
                 : 'Свернуть';
     }
 
+
     /*
-     * =========================
-     * ПОЗИЦИЯ ВИДЖЕТА
-     * =========================
+     * ============================================================
+     * ПОЛОЖЕНИЕ ВИДЖЕТА
+     * ============================================================
      */
 
     function restoreWidgetPosition(widget) {
         try {
-            const rawValue =
+            const raw =
                 localStorage.getItem(
                     STORAGE_WIDGET_POSITION
                 );
 
-            if (!rawValue) {
+            if (!raw) {
                 return;
             }
 
             const saved =
-                JSON.parse(rawValue);
+                JSON.parse(raw);
 
             if (
                 !Number.isFinite(saved?.left) ||
@@ -788,12 +1396,15 @@
                     maxTop
                 ) + 'px';
 
-            widget.style.right = 'auto';
-            widget.style.bottom = 'auto';
+            widget.style.right =
+                'auto';
+
+            widget.style.bottom =
+                'auto';
 
         } catch (error) {
             console.warn(
-                'Avito Tweaks: ошибка восстановления позиции',
+                'Avito Tweaks: ошибка восстановления позиции.',
                 error
             );
         }
@@ -851,8 +1462,17 @@
         widget.style.bottom =
             'auto';
 
-        saveWidgetPosition(widget);
+        saveWidgetPosition(
+            widget
+        );
     }
+
+
+    /*
+     * ============================================================
+     * DRAG
+     * ============================================================
+     */
 
     function makeWidgetDraggable(
         widget,
@@ -971,7 +1591,9 @@
                 );
             }
 
-            saveWidgetPosition(widget);
+            saveWidgetPosition(
+                widget
+            );
         }
 
         handle.addEventListener(
@@ -995,15 +1617,18 @@
                     return;
                 }
 
-                keepWidgetInsideWindow(widget);
+                keepWidgetInsideWindow(
+                    widget
+                );
             }
         );
     }
 
+
     /*
-     * =========================
+     * ============================================================
      * СОЗДАНИЕ ВИДЖЕТА
-     * =========================
+     * ============================================================
      */
 
     function createWidget() {
@@ -1021,8 +1646,9 @@
         widget.id =
             'avito-tweaks-widget';
 
+
         /*
-         * Шапка
+         * HEADER
          */
         const header =
             document.createElement('div');
@@ -1045,7 +1671,9 @@
         title.textContent =
             'Avito Tweaks';
 
-        headerLeft.appendChild(title);
+        headerLeft.appendChild(
+            title
+        );
 
         const collapseButton =
             document.createElement('button');
@@ -1056,8 +1684,9 @@
         collapseButton.type =
             'button';
 
+
         /*
-         * Тело
+         * BODY
          */
         const body =
             document.createElement('div');
@@ -1074,6 +1703,7 @@
         subtitle.textContent =
             'Скрывать объявления';
 
+
         /*
          * Забронировано
          */
@@ -1081,8 +1711,10 @@
             createSwitch(
                 'Забронировано',
                 hideReserved,
+
                 value => {
-                    hideReserved = value;
+                    hideReserved =
+                        value;
 
                     localStorage.setItem(
                         STORAGE_HIDE_RESERVED,
@@ -1091,6 +1723,7 @@
                 }
             );
 
+
         /*
          * Просмотрено
          */
@@ -1098,8 +1731,10 @@
             createSwitch(
                 'Просмотрено',
                 hideViewed,
+
                 value => {
-                    hideViewed = value;
+                    hideViewed =
+                        value;
 
                     localStorage.setItem(
                         STORAGE_HIDE_VIEWED,
@@ -1108,6 +1743,7 @@
                 }
             );
 
+
         /*
          * Без доставки
          */
@@ -1115,8 +1751,10 @@
             createSwitch(
                 'Без доставки',
                 hideNoDelivery,
+
                 value => {
-                    hideNoDelivery = value;
+                    hideNoDelivery =
+                        value;
 
                     localStorage.setItem(
                         STORAGE_HIDE_NO_DELIVERY,
@@ -1124,6 +1762,7 @@
                     );
                 }
             );
+
 
         /*
          * Разделитель
@@ -1134,6 +1773,7 @@
         separator.className =
             'avito-tweaks-separator';
 
+
         /*
          * Чёрный список
          */
@@ -1141,8 +1781,10 @@
             createSwitch(
                 'Чёрный список',
                 hideBlacklist,
+
                 value => {
-                    hideBlacklist = value;
+                    hideBlacklist =
+                        value;
 
                     localStorage.setItem(
                         STORAGE_HIDE_BLACKLIST,
@@ -1151,75 +1793,16 @@
                 }
             );
 
-        const blacklistArea =
+
+        /*
+         * Контейнер плашек
+         */
+        const blacklistContainer =
             document.createElement('div');
 
-        blacklistArea.id =
-            'avito-tweaks-blacklist-area';
+        blacklistContainer.id =
+            'avito-tweaks-blacklist';
 
-        const blacklistInput =
-            document.createElement('textarea');
-
-        blacklistInput.id =
-            'avito-tweaks-blacklist-input';
-
-        blacklistInput.value =
-            blacklistRaw;
-
-        blacklistInput.placeholder =
-            'Impact, RetroShop, Vasya1987';
-
-        const blacklistHint =
-            document.createElement('div');
-
-        blacklistHint.id =
-            'avito-tweaks-blacklist-hint';
-
-        blacklistHint.textContent =
-            'Ники продавцов через запятую. Регистр не важен.';
-
-        let blacklistInputTimer =
-            null;
-
-        blacklistInput.addEventListener(
-            'input',
-            () => {
-                blacklistRaw =
-                    blacklistInput.value;
-
-                localStorage.setItem(
-                    STORAGE_BLACKLIST,
-                    blacklistRaw
-                );
-
-                /*
-                 * Пересобираем Set только при изменении поля.
-                 */
-                updateBlacklistNames();
-
-                clearTimeout(
-                    blacklistInputTimer
-                );
-
-                blacklistInputTimer =
-                    setTimeout(
-                        filterAllItems,
-                        250
-                    );
-            }
-        );
-
-        blacklistInput.addEventListener(
-            'pointerdown',
-            event => {
-                event.stopPropagation();
-            }
-        );
-
-        blacklistArea.append(
-            blacklistInput,
-            blacklistHint
-        );
 
         body.append(
             subtitle,
@@ -1228,8 +1811,9 @@
             noDeliverySwitch,
             separator,
             blacklistSwitch,
-            blacklistArea
+            blacklistContainer
         );
+
 
         header.append(
             headerLeft,
@@ -1241,10 +1825,19 @@
             body
         );
 
-        document.body.appendChild(widget);
+        document.body.appendChild(
+            widget
+        );
+
 
         /*
-         * Свернуть / развернуть
+         * Рендер ЧС
+         */
+        renderBlacklist();
+
+
+        /*
+         * Collapse
          */
         updateCollapsedState(
             widget,
@@ -1270,20 +1863,26 @@
                     collapseButton
                 );
 
-                requestAnimationFrame(() => {
-                    if (
-                        widget.style.left !== '' &&
-                        widget.style.top !== ''
-                    ) {
-                        keepWidgetInsideWindow(
-                            widget
-                        );
+                requestAnimationFrame(
+                    () => {
+
+                        if (
+                            widget.style.left !== '' &&
+                            widget.style.top !== ''
+                        ) {
+                            keepWidgetInsideWindow(
+                                widget
+                            );
+                        }
                     }
-                });
+                );
             }
         );
 
-        restoreWidgetPosition(widget);
+
+        restoreWidgetPosition(
+            widget
+        );
 
         makeWidgetDraggable(
             widget,
@@ -1292,10 +1891,11 @@
         );
     }
 
+
     /*
-     * =========================
-     * OBSERVER
-     * =========================
+     * ============================================================
+     * MUTATION OBSERVER
+     * ============================================================
      */
 
     function startObserver() {
@@ -1303,20 +1903,28 @@
             new MutationObserver(
                 mutations => {
 
-                    for (const mutation of mutations) {
-
+                    for (
+                        const mutation
+                        of mutations
+                    ) {
                         const targetElement =
-                            mutation.target.nodeType ===
+                            mutation.target
+                                .nodeType ===
                             Node.TEXT_NODE
-                                ? mutation.target.parentElement
+
+                                ? mutation.target
+                                    .parentElement
+
                                 : mutation.target;
 
                         /*
-                         * Изменения собственного виджета
-                         * фильтрацию не запускают.
+                         * Изменения внутри собственного виджета
+                         * игнорируем.
                          */
                         if (
-                            targetElement instanceof Element &&
+                            targetElement
+                                instanceof Element &&
+
                             targetElement.closest(
                                 '#avito-tweaks-widget'
                             )
@@ -1324,7 +1932,22 @@
                             continue;
                         }
 
-                        scheduleFilter();
+                        /*
+                         * Наши кнопки "В ЧС"
+                         * тоже не требуют полного обновления.
+                         */
+                        if (
+                            targetElement
+                                instanceof Element &&
+
+                            targetElement.closest(
+                                '.avito-tweaks-add-blacklist'
+                            )
+                        ) {
+                            continue;
+                        }
+
+                        scheduleRefresh();
                         break;
                     }
                 }
@@ -1347,10 +1970,11 @@
         );
     }
 
+
     /*
-     * =========================
+     * ============================================================
      * START
-     * =========================
+     * ============================================================
      */
 
     function start() {
@@ -1358,14 +1982,19 @@
             !document.body ||
             !document.head
         ) {
-            requestAnimationFrame(start);
+            requestAnimationFrame(
+                start
+            );
+
             return;
         }
 
         addStyles();
+
         createWidget();
 
-        filterAllItems();
+        refreshAll();
+
         startObserver();
     }
 
